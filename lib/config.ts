@@ -5,8 +5,6 @@ export const game = {
   timeLimitMs: 10_000,
   // extra server-side allowance for network latency
   graceMs: 1_000,
-  // how long the ✓/✗ result stays on screen before the next question
-  resultMs: 1_500,
 
   // Elo
   kProvisional: 40,

@@ -23,35 +23,42 @@ export function Game() {
   const input = useRef<HTMLInputElement>(null);
   const valueRef = useRef("");
   const busy = useRef(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const resultAt = useRef(0);
   // bumping this fetches the next question
   const [turn, setTurn] = useState(0);
-  const advance = useCallback(() => setTurn((t) => t + 1), []);
 
-  const submit = useCallback(async () => {
-    if (busy.current || !q) return;
-    busy.current = true;
-    clearTimeout(timer.current);
-    const res = await fetch("/api/answer", {
-      method: "POST",
-      body: JSON.stringify({ id: q.id, answer: valueRef.current }),
-    }).catch(() => null);
-    if (!res?.ok) return advance(); // pending question was already settled; move on
-    setResult(await res.json());
-    setPhase("result");
-    timer.current = setTimeout(advance, game.resultMs);
-  }, [q, advance]);
+  const next = useCallback(() => {
+    setPhase("loading");
+    setTurn((t) => t + 1);
+  }, []);
+
+  const submit = useCallback(
+    async (answer: string) => {
+      if (busy.current || !q) return;
+      busy.current = true;
+      const res = await fetch("/api/answer", {
+        method: "POST",
+        body: JSON.stringify({ id: q.id, answer }),
+      }).catch(() => null);
+      if (!res?.ok) return next(); // pending question was already settled; move on
+      setResult(await res.json());
+      setPhase("result");
+      resultAt.current = Date.now();
+      input.current?.focus();
+    },
+    [q, next],
+  );
 
   // fetch the pending question (resumed with its remaining time) or a new one
   useEffect(() => {
     let alive = true;
-    clearTimeout(timer.current);
+    let retry: ReturnType<typeof setTimeout> | undefined;
     fetchNext().then((data) => {
       if (!alive) return;
       if (data === "signed out") return window.location.reload();
       if (!data) {
         setPhase("error");
-        timer.current = setTimeout(advance, 3000);
+        retry = setTimeout(() => setTurn((t) => t + 1), 3000);
         return;
       }
       if (data.status === "empty") return setPhase("empty");
@@ -65,20 +72,22 @@ export function Game() {
     });
     return () => {
       alive = false;
-      clearTimeout(timer.current);
+      clearTimeout(retry);
     };
-  }, [turn, advance]);
+  }, [turn]);
 
   // when time runs out, send whatever is typed; the server decides if it was in time
   useEffect(() => {
     if (phase !== "question" || !q) return;
-    timer.current = setTimeout(submit, q.remainingMs);
-    return () => clearTimeout(timer.current);
+    const deadline = setTimeout(() => submit(valueRef.current), q.remainingMs);
+    return () => clearTimeout(deadline);
   }, [phase, q, submit]);
 
   if (phase === "empty") {
     return <main className="flex flex-1 items-center justify-center px-4 text-center">no questions left. come back later.</main>;
   }
+
+  const link = "text-sm text-muted hover:text-foreground hover:underline underline-offset-4";
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-10 px-4 pb-24">
@@ -101,14 +110,16 @@ export function Game() {
         onCopy={(e) => e.preventDefault()}
         onContextMenu={(e) => e.preventDefault()}
       >
-        {phase === "error" ? "something went wrong. retrying." : (q?.question ?? "")}
+        {phase === "error" ? "something went wrong. retrying." : phase === "loading" ? "" : (q?.question ?? "")}
       </h1>
 
       <form
         className="w-full max-w-sm"
         onSubmit={(e) => {
           e.preventDefault();
-          if (phase === "question" && value.trim()) submit();
+          if (phase === "question" && value.trim()) submit(value);
+          // ignore an Enter that was really a double-press of the answer
+          else if (phase === "result" && Date.now() - resultAt.current > 400) next();
         }}
       >
         <input
@@ -118,7 +129,7 @@ export function Game() {
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          enterKeyHint="send"
+          enterKeyHint={phase === "result" ? "next" : "send"}
           aria-label="answer"
           maxLength={100}
           value={value}
@@ -128,11 +139,26 @@ export function Game() {
             valueRef.current = e.target.value;
             setValue(e.target.value);
           }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && phase === "question") submit("");
+          }}
           className="w-full border-b border-muted py-2 text-center text-xl focus:border-foreground"
         />
         <p className="mt-4 h-6 text-center text-lg tabular-nums">
           {phase === "result" && result &&
             (result.correct ? `✓ ${signed(result.delta)}` : `✗ ${result.answer} ${signed(result.delta)}`)}
+        </p>
+        <p className="mt-6 h-5 text-center">
+          {phase === "question" && (
+            <button type="button" className={link} onClick={() => submit("")}>
+              give up
+            </button>
+          )}
+          {phase === "result" && (
+            <button type="button" className={link} onClick={next}>
+              next
+            </button>
+          )}
         </p>
       </form>
     </main>
