@@ -65,6 +65,24 @@ test("city answers accept the city alone", () => {
   assert.ok(!isCorrect("crosby", "Crosby, Stills & Nash", [], 0.85, "title"));
 });
 
+test("common aliases and acronyms", () => {
+  assert.ok(isCorrect("usa", "United States", [], 0.85, "country"));
+  assert.ok(isCorrect("USA", "the United States"));
+  assert.ok(isCorrect("U.S.", "United States"));
+  assert.ok(isCorrect("america", "United States of America"));
+  assert.ok(isCorrect("uk", "United Kingdom"));
+  assert.ok(isCorrect("ussr", "Soviet Union"));
+  assert.ok(isCorrect("holland", "Netherlands"));
+  assert.ok(isCorrect("ww2", "World War II"));
+  assert.ok(isCorrect("second world war", "World War II"));
+  assert.ok(isCorrect("nasa", "National Aeronautics and Space Administration"));
+  assert.ok(isCorrect("UN", "United Nations"));
+  assert.ok(!isCorrect("uk", "United States"));
+  assert.ok(!isCorrect("ww1", "World War II"));
+  assert.ok(!isCorrect("jk", "John Kennedy", [], 0.85, "person"));
+  assert.ok(!isCorrect("p", "Pacific Ocean"));
+});
+
 test("fuzzy typos on longer answers", () => {
   assert.ok(isCorrect("Shakespear", "Shakespeare"));
   assert.ok(isCorrect("Mississipi", "Mississippi"));

@@ -104,6 +104,36 @@ function surnames(name: string): string[] {
 
 const PLACES = new Set(["city", "region", "place"]);
 
+// Common names that mean the same thing (written already normalized).
+const ALIAS_GROUPS = [
+  ["united states", "united states of america", "usa", "us", "america"],
+  ["united kingdom", "uk", "great britain", "britain"],
+  ["soviet union", "ussr"],
+  ["united arab emirates", "uae", "emirates"],
+  ["democratic republic of congo", "democratic republic of the congo", "dr congo", "drc"],
+  ["netherlands", "holland"],
+  ["czech republic", "czechia"],
+  ["myanmar", "burma"],
+  ["ivory coast", "cote divoire"],
+  ["eswatini", "swaziland"],
+  ["north korea", "dprk"],
+  ["new zealand", "nz"],
+  ["united nations", "un"],
+  ["european union", "eu"],
+  ["world war ii", "world war 2", "second world war", "wwii", "ww2"],
+  ["world war i", "world war 1", "first world war", "wwi", "ww1"],
+];
+const ALIAS = new Map(ALIAS_GROUPS.flatMap((group, i) => group.map((name) => [name, i])));
+
+// "National Aeronautics and Space Administration" -> "nasa"
+const SMALL_WORDS = new Set(["of", "the", "and", "for", "de", "a", "an"]);
+const initials = (s: string) =>
+  s
+    .split(" ")
+    .filter((w) => !SMALL_WORDS.has(w))
+    .map((w) => w[0])
+    .join("");
+
 // "Selina Kyle / Catwoman" and "Mumbai (Bombay)" hold several acceptable answers
 export function alternatives(answer: string): string[] {
   const out = [answer];
@@ -128,6 +158,9 @@ export function isCorrect(
     const c = normalize(candidate);
     if (!c) continue;
     if (matches(g, c, fuzzyThreshold)) return true;
+    if (ALIAS.has(g) && ALIAS.get(g) === ALIAS.get(c)) return true;
+    // initials of a multi-word answer ("un", "nasa"); not for people's names
+    if (answerType !== "person" && g.length >= 2 && !g.includes(" ") && c.includes(" ") && initials(c) === g) return true;
     // a person can be named by surname alone
     if (answerType === "person" && surnames(c).some((s) => s.length >= 4 && matches(g, s, fuzzyThreshold))) return true;
     // "Portland, Maine": the city alone is enough
