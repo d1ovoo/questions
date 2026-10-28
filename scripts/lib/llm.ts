@@ -11,7 +11,8 @@ async function ollama(system: string, user: string, model: string): Promise<stri
       model,
       stream: false,
       format: "json",
-      options: { temperature: 0.4 },
+      // explicit context size: Ollama's default can silently truncate the article
+      options: { temperature: 0.4, num_ctx: gen.maxExtractChars > 6000 ? 8192 : 4096 },
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },

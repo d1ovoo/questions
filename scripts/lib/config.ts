@@ -11,15 +11,20 @@ const num = (name: string, fallback: number) => {
 const str = (name: string, fallback: string) => process.env[name] || fallback;
 
 export const gen = {
-  // Wikipedia filters
+  // source: Wikipedia Vital articles, most viewed first; stop below this many views/day
   minDailyViews: num("GEN_MIN_DAILY_VIEWS", 150), // average over the last 30 days
   minArticleBytes: num("GEN_MIN_ARTICLE_BYTES", 6000), // wikitext size; filters out stubs
   minExtractChars: num("GEN_MIN_EXTRACT_CHARS", 1500),
-  maxExtractChars: num("GEN_MAX_EXTRACT_CHARS", 6000), // text sent to the LLM
+  maxExtractChars: num("GEN_MAX_EXTRACT_CHARS", 4000), // text sent to the LLM
   userAgent: str(
     "GEN_USER_AGENT",
     "questions-trivia-generator/1.0 (https://github.com/; offline batch question generation)",
   ),
+
+  // questions asked from each article in one LLM call
+  questionsPerArticle: num("GEN_QUESTIONS_PER_ARTICLE", 3),
+  // articles processed at the same time (Ollama: also set OLLAMA_NUM_PARALLEL)
+  concurrency: num("GEN_CONCURRENCY", 3),
 
   // dedup: cosine similarity above this against any existing question = duplicate
   similarityThreshold: num("GEN_SIMILARITY_THRESHOLD", 0.85),
@@ -38,4 +43,5 @@ export const gen = {
   llmDelayMs: num("LLM_DELAY_MS", 0),
 
   stateFile: "scripts/.state.json",
+  listFile: "scripts/.vital-articles.json",
 };

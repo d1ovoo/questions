@@ -69,15 +69,16 @@ npm run review
 npm run generate -- --count 5000
 ```
 
-How it works, per article:
+How it works:
 
-1. Random Wikipedia articles, skipping titles like lists/years/seasons, disambiguation pages and stubs (`GEN_MIN_ARTICLE_BYTES`), and anything averaging fewer than `GEN_MIN_DAILY_VIEWS` views/day over 30 days. Roughly 1 in 150 random articles passes at the default of 150.
-2. The LLM writes one question with answer, accepted answers, category, difficulty. Malformed output, answers that leak into the question, long answers, references to "the article", and answers not present in the text are rejected.
-3. A second LLM call answers the question **blind** from the text (it never sees our answer) and reports whether the answer is supported, unique and the question standalone. The question is kept only if all are true and its answer matches ours.
-4. The question is embedded locally (all-MiniLM-L6-v2, 384 dims) and compared to every question in the database via pgvector; similarity ≥ `GEN_SIMILARITY_THRESHOLD` is a duplicate. The database also rejects the same normalized answer from the same article.
-5. Inserted with `rating` derived from difficulty (1 → 800, 10 → 2000; see `lib/config.ts`).
+1. **Source**: Wikipedia's [Vital articles](https://en.wikipedia.org/wiki/Wikipedia:Vital_articles) (~50,000 important topics), sorted by pageviews and processed **most popular first**. The first run downloads the list and pageviews once (about 15 minutes) and caches it in `scripts/.vital-articles.json`; `--refresh-list` re-downloads it. Stubs, lists and disambiguation pages are skipped, and the run stops below `GEN_MIN_DAILY_VIEWS`.
+2. **Generation**: one LLM call per article writes `GEN_QUESTIONS_PER_ARTICLE` (default 3) questions about different, notable facts, from the first `GEN_MAX_EXTRACT_CHARS` (default 4,000) characters of the article. Malformed output, answers that leak into the question, long answers, references to "the article", and answers not present in the text are rejected.
+3. **Verification**: a second call answers all of the article's questions **blind** from the text (it never sees our answers) and reports for each whether the answer is supported, unique, the question standalone, and whether it's too obscure. A question is kept only if all checks pass and its answer matches ours.
+4. **Parallel**: `GEN_CONCURRENCY` (default 3) articles are processed at once. For Ollama to actually run them in parallel, set the Windows environment variable `OLLAMA_NUM_PARALLEL=3` (or higher) and restart Ollama. If your GPU runs out of memory, lower both.
+5. The question is embedded locally (all-MiniLM-L6-v2, 384 dims) and compared to every question in the database via pgvector; similarity ≥ `GEN_SIMILARITY_THRESHOLD` is a duplicate. The database also rejects the same normalized answer from the same article.
+6. Inserted with `rating` derived from difficulty (1 → 800, 10 → 2000; see `lib/config.ts`).
 
-It's resumable: progress is saved to `scripts/.state.json` after every article. Ctrl+C anytime and run the same command again to continue. `--fresh` discards an unfinished run. Articles already used are remembered across runs.
+It's resumable: progress is saved to `scripts/.state.json` after every article (an article that was mid-way when you stopped is redone). Ctrl+C anytime and run the same command again to continue. `--fresh` discards an unfinished run. Articles already used are remembered across runs.
 
 To use a free API tier instead of Ollama, set `LLM_PROVIDER=openai` plus `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL` (Groq, Gemini and OpenRouter all expose OpenAI-compatible endpoints). All LLM calls go through `completeJSON` in `scripts/lib/llm.ts`.
 
