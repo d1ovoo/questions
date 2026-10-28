@@ -82,8 +82,15 @@ export function similarity(a: string, b: string): number {
 
 const isNumeric = (s: string) => /^\d+(\.\d+)?$/.test(s);
 
+// "26 years" -> "26"
+const leadingNumber = (s: string) => s.match(/^(\d+(?:\.\d+)?)(?: [a-z ]+)?$/)?.[1];
+
 function matches(g: string, c: string, fuzzyThreshold: number): boolean {
   if (g === c) return true;
+  // a number answer with a unit accepts the bare number, and the other way round
+  const gn = leadingNumber(g);
+  const cn = leadingNumber(c);
+  if (gn && cn && gn === cn && (g === gn || c === cn)) return true;
   // numbers and very short answers must match exactly
   if (isNumeric(c) || isNumeric(g) || c.length < 4) return false;
   return similarity(g, c) >= fuzzyThreshold;

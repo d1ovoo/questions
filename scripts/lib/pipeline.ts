@@ -34,6 +34,7 @@ NEVER ask about personal biography details: when or where someone was born or di
 Also avoid obscure details: minor officials, exact statistics, populations, measurements, dates of minor events. If you would need to be a specialist in "${a.title}" to have any chance, choose another fact.
 
 - For dates, ask for the year only, and only for famous events.
+- "How many" questions need an exact, small, well-known number as the answer (e.g. "5", "32"). Never vague answers like "over a decade", "about 50" or "several".
 - Always name the subject ("${a.title.replace(/\s*\(.*?\)/g, "")}") or make it the answer; never "the novel", "the company", "he" or "she".
 - Mix difficulties: at least one question should be easy.
 - If the text has fewer than ${n} facts worth asking, return fewer questions.
@@ -103,6 +104,10 @@ const BIOGRAPHY = [
 ];
 export const isBiography = (question: string) => BIOGRAPHY.some((re) => re.test(question));
 
+const VAGUE = /^(about|around|approximately|roughly|over|under|more than|less than|fewer than|nearly|almost|at least|up to|several|many|few|some|a few|dozens?|hundreds|thousands)\b/i;
+export const isVagueQuantity = (question: string, answer: string) =>
+  VAGUE.test(answer.trim()) || (/\bhow (many|much)\b/i.test(question) && !/^\d/.test(normalize(answer)));
+
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
 // Normalized phrase appears as whole words inside normalized text.
@@ -161,6 +166,8 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
   // "Where was X born?" doesn't say if it wants a city, state or country
   if (/^where\b/i.test(question) && !/\b(city|town|country|state|province|region|continent)\b/i.test(question))
     return { ok: false, reason: "vague place", detail: question };
+  // "How many…" needs a number, and nobody can type "over a decade" or "about 50"
+  if (isVagueQuantity(question, answer)) return { ok: false, reason: "vague quantity", detail: `${question} → ${answer}` };
   // exact statistics ("3,474", "1.2%") are guesswork, not knowledge; years are fine
   if (answer_type !== "year" && /^\d/.test(answer) && (/%|\d[.,]\d/.test(answer) || Number(na.split(" ")[0]) >= 1000))
     return { ok: false, reason: "exact statistic", detail: `${question} → ${answer}` };

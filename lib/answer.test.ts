@@ -28,6 +28,11 @@ test("numbers as digits or words, never fuzzy", () => {
   assert.ok(isCorrect("7", "seven"));
   assert.ok(!isCorrect("1968", "1969"));
   assert.ok(!isCorrect("70", "7"));
+  assert.ok(isCorrect("26", "26 years"));
+  assert.ok(isCorrect("32 teams", "32"));
+  assert.ok(isCorrect("thirty two", "32 teams"));
+  assert.ok(!isCorrect("25", "26 years"));
+  assert.ok(!isCorrect("26 days", "26 years"));
 });
 
 test("people can be named by surname", () => {
