@@ -52,6 +52,14 @@ test("answers listing alternatives", () => {
   assert.ok(isCorrect("kyle", "Selina Kyle / Catwoman", [], 0.85, "person"));
 });
 
+test("city answers accept the city alone", () => {
+  assert.ok(isCorrect("portland", "Portland, Maine", [], 0.85, "city"));
+  assert.ok(isCorrect("Portland, Maine", "Portland, Maine", [], 0.85, "city"));
+  assert.ok(!isCorrect("maine", "Portland, Maine", [], 0.85, "city"));
+  assert.ok(!isCorrect("usa", "Portland, Maine", [], 0.85, "city"));
+  assert.ok(!isCorrect("crosby", "Crosby, Stills & Nash", [], 0.85, "title"));
+});
+
 test("fuzzy typos on longer answers", () => {
   assert.ok(isCorrect("Shakespear", "Shakespeare"));
   assert.ok(isCorrect("Mississipi", "Mississippi"));

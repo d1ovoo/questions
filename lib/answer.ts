@@ -95,6 +95,8 @@ function surnames(name: string): string[] {
   return parts.slice(1).map((_, i) => parts.slice(i + 1).join(" "));
 }
 
+const PLACES = new Set(["city", "region", "place"]);
+
 // "Selina Kyle / Catwoman" and "Mumbai (Bombay)" hold several acceptable answers
 export function alternatives(answer: string): string[] {
   const out = [answer];
@@ -121,6 +123,9 @@ export function isCorrect(
     if (matches(g, c, fuzzyThreshold)) return true;
     // a person can be named by surname alone
     if (answerType === "person" && surnames(c).some((s) => s.length >= 4 && matches(g, s, fuzzyThreshold))) return true;
+    // "Portland, Maine": the city alone is enough
+    if (PLACES.has(answerType ?? "") && candidate.includes(",") && matches(g, normalize(candidate.split(",")[0]), fuzzyThreshold))
+      return true;
   }
   return false;
 }

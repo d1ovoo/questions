@@ -44,7 +44,7 @@ export const categories = [
 
 export type Category = (typeof categories)[number];
 
-export const answerTypes = ["person", "year", "number", "place", "title", "other"] as const;
+export const answerTypes = ["person", "year", "number", "city", "country", "region", "place", "title", "other"] as const;
 export type AnswerType = (typeof answerTypes)[number];
 
 // placeholder shown in the answer input
@@ -52,6 +52,9 @@ export const answerHints: Record<string, string> = {
   person: "name or surname",
   year: "year",
   number: "number",
+  city: "city",
+  country: "country",
+  region: "state / region",
   place: "place",
   title: "title",
 };

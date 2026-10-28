@@ -38,7 +38,8 @@ Rules:
 - accepted_answers: other ways of writing the SAME answer (alternative spellings, surname only for well-known people, abbreviations, numerals vs words). Never include different answers.
 - category: one of ${categories.join(", ")}.
 - difficulty: 1 (almost everyone knows it) to 10 (only experts know it), for a general audience.
-- answer_type: one of ${answerTypes.join(", ")}. Use "person" when the answer is a person's name (give their full name as the answer), "title" for a book, film, song or artwork.
+- answer_type: one of ${answerTypes.join(", ")}. Use "person" when the answer is a person's name (give their full name as the answer), "title" for a book, film, song or artwork, and "city", "country" or "region" (a state, province or region) for places; "place" only for other places such as buildings or rivers.
+- For places, say in the question which kind of place you want ("In which city…", "In which country…"). Never just "Where…".
 
 Title: ${a.title}${a.topic ? `\nTopic area: ${a.topic}` : ""}
 Text:
@@ -135,6 +136,9 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
       ? "year"
       : "other";
   // a person's surname in the question gives the answer away too
+  // "Where was X born?" doesn't say if it wants a city, state or country
+  if (/^where/i.test(question) && !/(city|town|country|state|province|region|continent)/i.test(question))
+    return { ok: false, reason: "vague place", detail: question };
   if (answer_type === "person") {
     const last = na.split(" ").at(-1) ?? "";
     if (last.length >= 4 && containsPhrase(nq, last)) return { ok: false, reason: "answer in question", detail: question };
