@@ -138,15 +138,28 @@ function excerpt(text: string, max: number): string {
   return end > max * 0.6 ? cut.slice(0, end + 1) : cut;
 }
 
-// Unused articles in order of popularity. Safe to share between concurrent workers.
+// Topics take turns (history, science, sport, …), each in order of popularity, so the
+// most-viewed celebrities don't crowd everything else out.
+function byTopic(list: Entry[]): Entry[] {
+  const groups = new Map<string, Entry[]>();
+  for (const e of list) groups.set(e.topic, [...(groups.get(e.topic) ?? []), e]);
+  const queues = [...groups.values()];
+  const out: Entry[] = [];
+  for (let i = 0; out.length < list.length; i++) {
+    for (const q of queues) if (q[i]) out.push(q[i]);
+  }
+  return out;
+}
+
+// Unused articles, topics interleaved. Safe to share between concurrent workers.
 export async function* articles(
   list: Entry[],
   seen: Set<string>,
   reject: (reason: string) => void,
 ): AsyncGenerator<Article> {
-  for (const e of list) {
+  const queue = byTopic(list.filter((e) => !seen.has(e.title) && e.views >= gen.minDailyViews));
+  for (const e of queue) {
     if (seen.has(e.title)) continue;
-    if (e.views < gen.minDailyViews) return; // sorted, so everything after is less popular
     const a = await articleText(e.title).catch(() => null);
     if (!a || a.text.length < gen.minExtractChars) {
       reject("wiki: short text");

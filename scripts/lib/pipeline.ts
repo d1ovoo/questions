@@ -22,12 +22,21 @@ const GEN_SYSTEM = "You write trivia questions for a quiz game. You reply with J
 
 const genPrompt = (a: Article, n: number) => `Write ${n} trivia questions about "${a.title}" using facts stated in the text below. Each question must be about a different fact.
 
-What makes a good question:
-- It is about a central, notable fact: the kind of thing printed in a pub quiz or quiz book, that a well-read person could know or reasonably guess.
-- Never ask about obscure details: minor relatives, minor officials, assistants, exact statistics, populations, measurements, or dates of minor events. If you would need to be a specialist in "${a.title}" to have any chance, choose another fact.
-- For dates, ask for the year only. Never ask for a full date such as a birthday.
-- Always name the subject ("${a.title.replace(/\s*\(.*?\)/g, "")}"), never "the novel", "the company", "he" or "she".
+Ask about real knowledge: what "${a.title}" is famous for, who created or discovered something, what happened in a famous event, records, titles, firsts, and facts of science, geography, history, sport and culture. Good examples of the style:
+- Who created the PHP programming language?
+- Which country did Germany invade on 1 September 1939, starting World War II?
+- How many European Cup / Champions League titles has FC Porto won?
+- What is the chemical symbol for gold?
+- Which company did Jeff Bezos found in 1994?
+These examples only show the style. Every question you write must be about "${a.title}" and answered by the text below.
+
+NEVER ask about personal biography details: when or where someone was born or died, their age, parents, children, siblings, spouses or relationships, schooling, height, net worth, or what they did before becoming famous. For a person, ask about their work, achievements and what they are known for.
+Also avoid obscure details: minor officials, exact statistics, populations, measurements, dates of minor events. If you would need to be a specialist in "${a.title}" to have any chance, choose another fact.
+
+- For dates, ask for the year only, and only for famous events.
+- Always name the subject ("${a.title.replace(/\s*\(.*?\)/g, "")}") or make it the answer; never "the novel", "the company", "he" or "she".
 - Mix difficulties: at least one question should be easy.
+- If the text has fewer than ${n} facts worth asking, return fewer questions.
 
 Rules:
 - One sentence ending with "?". It must make sense on its own to someone who has never seen this text: name the subject explicitly. Never mention "the article", "the text", "the passage" or "according to".
@@ -69,6 +78,7 @@ For each question, in the same order, reply with JSON only:
   "unambiguous": <true if exactly one reasonable answer exists, false if other people, places, dates or things could also fit>,
   "standalone": <true if the question makes sense without seeing the text and does not refer to it>,
   "obscure": <true if only a specialist could know this; false for a notable fact a well-read person might know>,
+  "biography": <true if it asks about a personal detail (birth, death, age, family, relationships, schooling, wealth) rather than what the subject is known for>,
   "reason": "<short reason if anything fails>"}]}`;
 
 // fallback when the LLM says "other": the Vital articles topic area
@@ -82,6 +92,16 @@ const TOPIC_CATEGORY: Record<string, Category> = {
   Mathematics: "science",
   Technology: "technology",
 };
+
+// Personal-biography questions ("When was X born?") are never wanted, whatever the LLM thinks.
+const BIOGRAPHY = [
+  /\bborn\b|\bbirth(place|day|date)?\b/i,
+  /\b(when|where|what year|which year|how old|what age)\b[^?]*\b(die|died|dies|death)\b/i,
+  /\b(how old|at what age|what age|age of)\b/i,
+  /\bmaiden name\b/i,
+  /\b(net worth|high school|graduat\w*|alma mater|studied at|attended)\b/i,
+];
+export const isBiography = (question: string) => BIOGRAPHY.some((re) => re.test(question));
 
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
@@ -97,6 +117,7 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
     return { ok: false, reason: "bad question shape", detail: question };
   if (/\b(article|passage|the text|according to|mentioned)\b/i.test(question))
     return { ok: false, reason: "refers to source", detail: question };
+  if (isBiography(question)) return { ok: false, reason: "biography", detail: question };
   if (answer.length > 60 || answer.split(/\s+/).length > 6)
     return { ok: false, reason: "answer too long", detail: answer };
 
@@ -111,8 +132,10 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
 
   // the question (or, when the subject is the answer, the answer) must name the subject
   const titleWords = normalize(a.title.replace(/\(.*?\)/g, "")).split(" ").filter((w) => w.length >= 4);
+  const acronym = (a.title.replace(/\(.*?\)/g, "").match(/\b[A-Z]/g) ?? []).join("").toLowerCase(); // "NFL"
   const words = `${nq} ${na}`.split(" ");
-  if (titleWords.length && !titleWords.some((t) => words.some((w) => w.startsWith(t))))
+  const named = titleWords.some((t) => words.some((w) => w.startsWith(t))) || (acronym.length >= 2 && words.includes(acronym));
+  if (titleWords.length && !named)
     return { ok: false, reason: "subject not named", detail: question };
 
   const accepted = Array.isArray(raw.accepted_answers)
@@ -132,13 +155,16 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
   const t = str(raw.answer_type).toLowerCase();
   const answer_type: AnswerType = (answerTypes as readonly string[]).includes(t)
     ? (t as AnswerType)
-    : /^d{3,4}$/.test(na)
+    : /^\d{3,4}$/.test(na)
       ? "year"
       : "other";
-  // a person's surname in the question gives the answer away too
   // "Where was X born?" doesn't say if it wants a city, state or country
-  if (/^where/i.test(question) && !/(city|town|country|state|province|region|continent)/i.test(question))
+  if (/^where\b/i.test(question) && !/\b(city|town|country|state|province|region|continent)\b/i.test(question))
     return { ok: false, reason: "vague place", detail: question };
+  // exact statistics ("3,474", "1.2%") are guesswork, not knowledge; years are fine
+  if (answer_type !== "year" && /^\d/.test(answer) && (/%|\d[.,]\d/.test(answer) || Number(na.split(" ")[0]) >= 1000))
+    return { ok: false, reason: "exact statistic", detail: `${question} → ${answer}` };
+  // a person's surname in the question gives the answer away too
   if (answer_type === "person") {
     const last = na.split(" ").at(-1) ?? "";
     if (last.length >= 4 && containsPhrase(nq, last)) return { ok: false, reason: "answer in question", detail: question };
@@ -180,6 +206,7 @@ function judge(check: Record<string, unknown> | undefined, q: Candidate): Result
   if (check.unambiguous !== true) return why("verify: ambiguous");
   if (check.standalone !== true) return why("verify: not standalone");
   if (check.obscure === true) return why("verify: obscure");
+  if (check.biography === true) return why("verify: biography");
   const theirs = str(check.answer);
   if (!theirs || !agrees(theirs, q)) return why("verify: different answer", `${q.answer} vs ${theirs}`);
   return { ok: true, q };
