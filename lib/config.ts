@@ -43,3 +43,15 @@ export const categories = [
 ] as const;
 
 export type Category = (typeof categories)[number];
+
+export const answerTypes = ["person", "year", "number", "place", "title", "other"] as const;
+export type AnswerType = (typeof answerTypes)[number];
+
+// placeholder shown in the answer input
+export const answerHints: Record<string, string> = {
+  person: "name or surname",
+  year: "year",
+  number: "number",
+  place: "place",
+  title: "title",
+};

@@ -30,6 +30,17 @@ test("numbers as digits or words, never fuzzy", () => {
   assert.ok(!isCorrect("70", "7"));
 });
 
+test("people can be named by surname", () => {
+  assert.ok(isCorrect("mendeleev", "Dmitri Mendeleev", [], 0.85, "person"));
+  assert.ok(isCorrect("mendeleyev", "Dmitri Mendeleev", [], 0.85, "person"));
+  assert.ok(isCorrect("da vinci", "Leonardo da Vinci", [], 0.85, "person"));
+  assert.ok(isCorrect("vinci", "Leonardo da Vinci", [], 0.85, "person"));
+  assert.ok(!isCorrect("dmitri", "Dmitri Mendeleev", [], 0.85, "person"));
+  assert.ok(!isCorrect("mendeleev", "Dmitri Mendeleev")); // only for person answers
+  assert.ok(!isCorrect("ocean", "Pacific Ocean", [], 0.85, "place"));
+  assert.ok(!isCorrect("li", "Bruce Li", [], 0.85, "person")); // too short to be safe
+});
+
 test("fuzzy typos on longer answers", () => {
   assert.ok(isCorrect("Shakespear", "Shakespeare"));
   assert.ok(isCorrect("Mississipi", "Mississippi"));

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { game } from "@/lib/config";
 
-type Question = { id: number; question: string; remainingMs: number };
+type Question = { id: number; question: string; remainingMs: number; hint: string };
 type Result = { correct: boolean; answer: string; delta: number };
 type Phase = "loading" | "question" | "result" | "empty" | "error";
 
@@ -131,6 +131,7 @@ export function Game() {
           spellCheck={false}
           enterKeyHint={phase === "result" ? "next" : "send"}
           aria-label="answer"
+          placeholder={phase === "question" ? q?.hint : ""}
           maxLength={100}
           value={value}
           // readOnly instead of disabled keeps the mobile keyboard open between questions

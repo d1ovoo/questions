@@ -9,7 +9,7 @@ Minimal trivia with an Elo rating. Every question is shown exactly once, to one 
 ## 1. Supabase
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. **SQL Editor** → paste all of [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) → Run.
+2. **SQL Editor** → paste and run each file in [`supabase/migrations`](supabase/migrations) in order (`0001_init.sql`, then `0002_answer_type.sql`, …). When a new migration file appears later, run just that one.
 3. **Authentication → Sign In / Providers**
    - Email: enabled (magic link works by default).
    - Google: enabled. In Google Cloud Console create an OAuth client (Web), with the authorized redirect URI `https://<project-ref>.supabase.co/auth/v1/callback`. Paste the client ID and secret into Supabase.

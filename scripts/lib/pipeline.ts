@@ -1,5 +1,5 @@
 // Article -> candidate questions -> validated -> verified (one LLM call each, batched per article).
-import { categories, type Category } from "../../lib/config";
+import { answerTypes, categories, type AnswerType, type Category } from "../../lib/config";
 import { isCorrect, normalize } from "../../lib/answer";
 import { gen } from "./config";
 import { completeJSON } from "./llm";
@@ -11,6 +11,7 @@ export type Candidate = {
   accepted_answers: string[];
   category: Category;
   difficulty: number;
+  answer_type: AnswerType;
   source_url: string;
   source_title: string;
 };
@@ -36,6 +37,7 @@ Rules:
 - accepted_answers: other ways of writing the SAME answer (alternative spellings, surname only for well-known people, abbreviations, numerals vs words). Never include different answers.
 - category: one of ${categories.join(", ")}.
 - difficulty: 1 (almost everyone knows it) to 10 (only experts know it), for a general audience.
+- answer_type: one of ${answerTypes.join(", ")}. Use "person" when the answer is a person's name (give their full name as the answer), "title" for a book, film, song or artwork.
 
 Title: ${a.title}${a.topic ? `\nTopic area: ${a.topic}` : ""}
 Text:
@@ -44,7 +46,7 @@ ${a.text}
 """
 
 Reply with JSON only:
-{"questions": [{"question": "...", "answer": "...", "accepted_answers": ["..."], "category": "...", "difficulty": 3}]}`;
+{"questions": [{"question": "...", "answer": "...", "accepted_answers": ["..."], "category": "...", "difficulty": 3, "answer_type": "..."}]}`;
 
 const VERIFY_SYSTEM = "You are a strict fact-checker for a quiz game. You reply with JSON only.";
 
@@ -125,6 +127,18 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
     said !== "other" && (categories as readonly string[]).includes(said)
       ? (said as Category)
       : (TOPIC_CATEGORY[a.topic] ?? "other");
+  const t = str(raw.answer_type).toLowerCase();
+  const answer_type: AnswerType = (answerTypes as readonly string[]).includes(t)
+    ? (t as AnswerType)
+    : /^d{3,4}$/.test(na)
+      ? "year"
+      : "other";
+  // a person's surname in the question gives the answer away too
+  if (answer_type === "person") {
+    const last = na.split(" ").at(-1) ?? "";
+    if (last.length >= 4 && containsPhrase(nq, last)) return { ok: false, reason: "answer in question", detail: question };
+  }
+
   const d = Math.round(Number(raw.difficulty));
   const difficulty = Number.isFinite(d) ? Math.min(10, Math.max(1, d)) : 5;
 
@@ -136,6 +150,7 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
       accepted_answers: accepted,
       category,
       difficulty,
+      answer_type,
       source_url: a.url,
       source_title: a.title,
     },
@@ -144,7 +159,7 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
 
 // The verifier answers blind (it never sees our answer), so agreement is meaningful.
 function agrees(verifierAnswer: string, q: Candidate): boolean {
-  if (isCorrect(verifierAnswer, q.answer, q.accepted_answers)) return true;
+  if (isCorrect(verifierAnswer, q.answer, q.accepted_answers, 0.85, q.answer_type)) return true;
   const v = normalize(verifierAnswer);
   return [q.answer, ...q.accepted_answers].some((s) => {
     const n = normalize(s);

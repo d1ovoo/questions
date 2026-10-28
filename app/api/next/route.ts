@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUserId } from "@/lib/auth";
-import { game } from "@/lib/config";
+import { answerHints, game } from "@/lib/config";
 import { rateLimited } from "@/lib/ratelimit";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
@@ -26,6 +26,7 @@ export async function POST() {
     id: data.id,
     question: data.question,
     category: data.category,
+    hint: answerHints[data.answer_type] ?? "",
     remainingMs: Math.max(0, game.timeLimitMs - data.elapsed_ms),
   });
 }

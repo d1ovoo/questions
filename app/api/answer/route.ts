@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   const q = pending?.[0];
   if (!q || q.id !== body.id) return NextResponse.json({ error: "no such question" }, { status: 409 });
 
-  const correct = isCorrect(given, q.answer, q.accepted_answers, game.fuzzyThreshold);
+  const correct = isCorrect(given, q.answer, q.accepted_answers, game.fuzzyThreshold, q.answer_type);
   const { data, error } = await admin.rpc("record_answer", {
     p_user: userId,
     p_question: q.id,

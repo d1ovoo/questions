@@ -82,21 +82,34 @@ export function similarity(a: string, b: string): number {
 
 const isNumeric = (s: string) => /^\d+(\.\d+)?$/.test(s);
 
+function matches(g: string, c: string, fuzzyThreshold: number): boolean {
+  if (g === c) return true;
+  // numbers and very short answers must match exactly
+  if (isNumeric(c) || isNumeric(g) || c.length < 4) return false;
+  return similarity(g, c) >= fuzzyThreshold;
+}
+
+// "Dmitri Mendeleev" -> ["mendeleev"]; "Leonardo da Vinci" -> ["da vinci", "vinci"]
+function surnames(name: string): string[] {
+  const parts = name.split(" ");
+  return parts.slice(1).map((_, i) => parts.slice(i + 1).join(" "));
+}
+
 export function isCorrect(
   given: string,
   answer: string,
   accepted: string[] = [],
   fuzzyThreshold = 0.85,
+  answerType: string | null = null,
 ): boolean {
   const g = normalize(given);
   if (!g) return false;
   for (const candidate of [answer, ...accepted]) {
     const c = normalize(candidate);
     if (!c) continue;
-    if (g === c) return true;
-    // numbers and very short answers must match exactly
-    if (isNumeric(c) || isNumeric(g) || c.length < 4) continue;
-    if (similarity(g, c) >= fuzzyThreshold) return true;
+    if (matches(g, c, fuzzyThreshold)) return true;
+    // a person can be named by surname alone
+    if (answerType === "person" && surnames(c).some((s) => s.length >= 4 && matches(g, s, fuzzyThreshold))) return true;
   }
   return false;
 }

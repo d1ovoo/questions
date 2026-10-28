@@ -37,6 +37,10 @@ input {
   border-radius: 0;
 }
 
+input::placeholder {
+  color: var(--muted);
+}
+
 /* the timer: a thin line that shrinks to nothing */
 @keyframes shrink {
   from {
