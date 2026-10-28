@@ -41,6 +41,17 @@ test("people can be named by surname", () => {
   assert.ok(!isCorrect("li", "Bruce Li", [], 0.85, "person")); // too short to be safe
 });
 
+test("answers listing alternatives", () => {
+  assert.ok(isCorrect("catwoman", "Selina Kyle / Catwoman"));
+  assert.ok(isCorrect("selina kyle", "Selina Kyle / Catwoman"));
+  assert.ok(isCorrect("Selina Kyle / Catwoman", "Selina Kyle / Catwoman"));
+  assert.ok(isCorrect("bombay", "Mumbai (Bombay)"));
+  assert.ok(isCorrect("mumbai", "Mumbai (Bombay)"));
+  assert.ok(isCorrect("ac/dc", "AC/DC"));
+  assert.ok(!isCorrect("ac", "AC/DC"));
+  assert.ok(isCorrect("kyle", "Selina Kyle / Catwoman", [], 0.85, "person"));
+});
+
 test("fuzzy typos on longer answers", () => {
   assert.ok(isCorrect("Shakespear", "Shakespeare"));
   assert.ok(isCorrect("Mississipi", "Mississippi"));

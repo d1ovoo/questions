@@ -1,6 +1,6 @@
 // Article -> candidate questions -> validated -> verified (one LLM call each, batched per article).
 import { answerTypes, categories, type AnswerType, type Category } from "../../lib/config";
-import { isCorrect, normalize } from "../../lib/answer";
+import { alternatives, isCorrect, normalize } from "../../lib/answer";
 import { gen } from "./config";
 import { completeJSON } from "./llm";
 import type { Article } from "./wikipedia";
@@ -32,6 +32,7 @@ What makes a good question:
 Rules:
 - One sentence ending with "?". It must make sense on its own to someone who has never seen this text: name the subject explicitly. Never mention "the article", "the text", "the passage" or "according to".
 - The answer is short: ideally 1-3 words, a name, a number or a year. It must be stated in the text.
+- Give ONE answer. Never write "A / B" or "A (B)"; put other forms in accepted_answers.
 - Exactly one answer can be correct. Avoid questions that several people, places or dates could answer.
 - Do not put the answer, or part of it, in the question.
 - accepted_answers: other ways of writing the SAME answer (alternative spellings, surname only for well-known people, abbreviations, numerals vs words). Never include different answers.
@@ -119,7 +120,7 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
 
   // grounding: a non-numeric answer (or one of its forms) must appear in the source
   const nt = normalize(a.text.replace(/\n/g, " "));
-  const grounded = /^\d/.test(na) || [answer, ...accepted].some((s) => containsPhrase(nt, normalize(s)));
+  const grounded = /^\d/.test(na) || [answer, ...accepted].flatMap(alternatives).some((s) => containsPhrase(nt, normalize(s)));
   if (!grounded) return { ok: false, reason: "answer not in text", detail: answer };
 
   const said = str(raw.category).toLowerCase();

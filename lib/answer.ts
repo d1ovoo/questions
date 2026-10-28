@@ -95,6 +95,17 @@ function surnames(name: string): string[] {
   return parts.slice(1).map((_, i) => parts.slice(i + 1).join(" "));
 }
 
+// "Selina Kyle / Catwoman" and "Mumbai (Bombay)" hold several acceptable answers
+export function alternatives(answer: string): string[] {
+  const out = [answer];
+  for (const part of answer.split(/\s+\/\s+/)) {
+    out.push(part);
+    const paren = part.match(/^(.+?)\s*\((.+)\)\s*$/);
+    if (paren) out.push(paren[1], paren[2]);
+  }
+  return [...new Set(out.map((s) => s.trim()).filter(Boolean))];
+}
+
 export function isCorrect(
   given: string,
   answer: string,
@@ -104,7 +115,7 @@ export function isCorrect(
 ): boolean {
   const g = normalize(given);
   if (!g) return false;
-  for (const candidate of [answer, ...accepted]) {
+  for (const candidate of [answer, ...accepted].flatMap(alternatives)) {
     const c = normalize(candidate);
     if (!c) continue;
     if (matches(g, c, fuzzyThreshold)) return true;
