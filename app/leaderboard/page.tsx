@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentProfile } from "@/lib/auth";
 import { game } from "@/lib/config";
@@ -46,10 +47,12 @@ export default async function Leaderboard() {
 
 function Line({ row }: { row: Row }) {
   return (
-    <li className={`flex gap-4 py-1 ${row.me ? "font-semibold" : ""}`}>
-      <span className="w-10 text-right text-muted">{row.rank}</span>
-      <span className="flex-1 truncate">{row.username}</span>
-      <span>{row.rating}</span>
+    <li className={row.me ? "font-semibold" : ""}>
+      <Link href={row.me ? "/profile" : `/u/${row.username}`} className="group flex gap-4 py-1">
+        <span className="w-10 text-right text-muted">{row.rank}</span>
+        <span className="flex-1 truncate underline-offset-4 group-hover:underline">{row.username}</span>
+        <span>{row.rating}</span>
+      </Link>
     </li>
   );
 }

@@ -10,7 +10,9 @@ const tabs = [
 ];
 
 export function Nav() {
-  const path = usePathname();
+  // another player's page (/u/name) belongs to the leaderboard tab
+  const pathname = usePathname();
+  const path = pathname.startsWith("/u/") ? "/leaderboard" : pathname;
   return (
     <nav className="flex justify-center gap-3 pt-6 pb-2 text-sm">
       {tabs.map((t, i) => (
