@@ -5,8 +5,8 @@ import "./globals.css";
 const font = Geist({ variable: "--font-main", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "questions",
-  description: "unlimited trivia. every question is asked once.",
+  title: "rankedtrivia",
+  description: "ranked trivia. never the same question twice.",
 };
 
 export const viewport: Viewport = {

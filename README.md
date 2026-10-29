@@ -1,4 +1,4 @@
-# questions
+# rankedtrivia
 
 Minimal trivia with an Elo rating. A player never sees the same question twice; different players can get the same questions.
 
