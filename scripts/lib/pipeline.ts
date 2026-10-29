@@ -151,17 +151,25 @@ const GENERIC = new Set(
     "museum festival day night world national international united new").split(" "),
 );
 
-// The question (or, when the subject is the answer, the answer) must name the subject by a
-// distinctive word of the article title ("Stanford" in "Stanford prison experiment").
+// The question must name the subject by a distinctive word of the article title ("Stanford"
+// in "Stanford prison experiment") or its acronym ("NFL"), or the answer must be the subject
+// ("Which battle ended Napoleon's rule? → Battle of Waterloo"). An acronym in the answer
+// doesn't count: "the league's championship match → MLS Cup" never says which league.
 export function namesSubject(question: string, answer: string, title: string): boolean {
   const clean = title.replace(/\(.*?\)/g, "");
   const all = normalize(clean).split(" ").filter((w) => w.length >= 4);
   const distinctive = all.filter((w) => !GENERIC.has(w));
   const required = distinctive.length ? distinctive : all;
   if (!required.length) return true;
-  const acronym = (clean.match(/\b[A-Z]/g) ?? []).join("").toLowerCase(); // "NFL"
-  const words = `${normalize(question)} ${normalize(answer)}`.split(" ");
-  return required.some((t) => words.some((w) => w.startsWith(t))) || (acronym.length >= 2 && words.includes(acronym));
+  const acronym = (clean.match(/\b[A-Z]/g) ?? []).join("").toLowerCase();
+  const has = (words: string[], t: string) => words.some((w) => w.startsWith(t));
+  const q = normalize(question).split(" ");
+  const a = normalize(answer).split(" ");
+  return (
+    required.some((t) => has(q, t)) ||
+    (acronym.length >= 2 && q.includes(acronym)) ||
+    required.some((t) => has(a, t))
+  );
 }
 
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
