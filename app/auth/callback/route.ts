@@ -10,8 +10,10 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get("type") as EmailOtpType | null;
   const supabase = await supabaseServer();
 
-  if (code) await supabase.auth.exchangeCodeForSession(code);
-  else if (tokenHash && type) await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
+  let ok = false;
+  if (code) ok = !(await supabase.auth.exchangeCodeForSession(code)).error;
+  else if (tokenHash && type) ok = !(await supabase.auth.verifyOtp({ token_hash: tokenHash, type })).error;
 
-  return NextResponse.redirect(`${origin}/`);
+  // an expired link, or one opened in a different browser than it was requested from
+  return NextResponse.redirect(ok ? `${origin}/` : `${origin}/signin?error=link`);
 }
