@@ -137,6 +137,28 @@ export const isYearQuestion = (question: string, answer: string) =>
 export const isVagueQuantity = (question: string, answer: string) =>
   VAGUE.test(answer.trim()) || (/\bhow (many|much)\b/i.test(question) && !/^\d/.test(normalize(answer)));
 
+// Generic words that don't identify a subject on their own: "the experiment", "the war".
+const GENERIC = new Set(
+  ("experiment war battle siege treaty film movie novel book album song band group company corporation university " +
+    "college school league cup championship tournament season series show game games disease virus crisis disaster " +
+    "attack attacks massacre shooting revolution empire kingdom republic state states city river island islands " +
+    "mountain lake party movement church religion language people history theory law act award awards prize " +
+    "museum festival day night world national international united new").split(" "),
+);
+
+// The question (or, when the subject is the answer, the answer) must name the subject by a
+// distinctive word of the article title ("Stanford" in "Stanford prison experiment").
+export function namesSubject(question: string, answer: string, title: string): boolean {
+  const clean = title.replace(/\(.*?\)/g, "");
+  const all = normalize(clean).split(" ").filter((w) => w.length >= 4);
+  const distinctive = all.filter((w) => !GENERIC.has(w));
+  const required = distinctive.length ? distinctive : all;
+  if (!required.length) return true;
+  const acronym = (clean.match(/\b[A-Z]/g) ?? []).join("").toLowerCase(); // "NFL"
+  const words = `${normalize(question)} ${normalize(answer)}`.split(" ");
+  return required.some((t) => words.some((w) => w.startsWith(t))) || (acronym.length >= 2 && words.includes(acronym));
+}
+
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
 // Normalized phrase appears as whole words inside normalized text.
@@ -167,13 +189,7 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
   if (/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b|\b\d{1,2}(st|nd|rd|th)?\s+(of\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(answer))
     return { ok: false, reason: "full date", detail: `${question} → ${answer}` };
 
-  // the question (or, when the subject is the answer, the answer) must name the subject
-  const titleWords = normalize(a.title.replace(/\(.*?\)/g, "")).split(" ").filter((w) => w.length >= 4);
-  const acronym = (a.title.replace(/\(.*?\)/g, "").match(/\b[A-Z]/g) ?? []).join("").toLowerCase(); // "NFL"
-  const words = `${nq} ${na}`.split(" ");
-  const named = titleWords.some((t) => words.some((w) => w.startsWith(t))) || (acronym.length >= 2 && words.includes(acronym));
-  if (titleWords.length && !named)
-    return { ok: false, reason: "subject not named", detail: question };
+  if (!namesSubject(question, answer, a.title)) return { ok: false, reason: "subject not named", detail: question };
 
   const accepted = Array.isArray(raw.accepted_answers)
     ? [...new Set(raw.accepted_answers.map(str).filter((s) => s && s.length <= 60 && normalize(s) !== na))].slice(0, 8)
