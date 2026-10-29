@@ -1,0 +1,35 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { numericDistractors, validDistractors } from "./distractors";
+
+test("years get nearby, distinct, non-future years", () => {
+  for (let i = 0; i < 50; i++) {
+    const d = numericDistractors("1939", "year")!;
+    assert.equal(d.length, 3);
+    assert.equal(new Set(d).size, 3);
+    for (const y of d.map(Number)) {
+      assert.ok(y !== 1939 && Math.abs(y - 1939) <= 15);
+    }
+  }
+  const recent = numericDistractors("2024", "year")!;
+  assert.ok(recent.every((y) => Number(y) <= new Date().getFullYear()));
+});
+
+test("numbers keep their unit and stay positive", () => {
+  for (let i = 0; i < 50; i++) {
+    const d = numericDistractors("26 years", "number")!;
+    assert.equal(new Set(d).size, 3);
+    assert.ok(d.every((x) => /^\d+ years$/.test(x) && x !== "26 years"));
+    assert.ok(numericDistractors("1", "number")!.every((x) => Number(x) > 1));
+  }
+  assert.equal(numericDistractors("Paris", "city"), null);
+});
+
+test("LLM options are rejected if they could be the right answer", () => {
+  const q = { question: "Q?", answer: "United States", accepted_answers: ["USA"], answer_type: "country" };
+  assert.deepEqual(validDistractors(["Canada", "Mexico", "Brazil"], q), ["Canada", "Mexico", "Brazil"]);
+  assert.equal(validDistractors(["Canada", "USA", "Mexico"], q), null); // only 2 valid left
+  assert.deepEqual(validDistractors(["Canada", "America", "Mexico", "Cuba"], q), ["Canada", "Mexico", "Cuba"]);
+  assert.equal(validDistractors(["Canada", "Canada", "Mexico"], q), null);
+  assert.equal(validDistractors("nope", q), null);
+});

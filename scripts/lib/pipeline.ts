@@ -1,6 +1,7 @@
 // Article -> candidate questions -> validated -> verified (one LLM call each, batched per article).
 import { answerTypes, categories, type AnswerType, type Category } from "../../lib/config";
-import { alternatives, isCorrect, normalize } from "../../lib/answer";
+import { alternatives, normalize } from "../../lib/answer";
+import { numericDistractors, shuffle, validDistractors } from "./distractors";
 import { gen } from "./config";
 import { completeJSON } from "./llm";
 import type { Article } from "./wikipedia";
@@ -12,6 +13,7 @@ export type Candidate = {
   category: Category;
   difficulty: number;
   answer_type: AnswerType;
+  distractors: string[];
   source_url: string;
   source_title: string;
 };
@@ -50,6 +52,7 @@ Rules:
 - difficulty: 1 (almost everyone knows it) to 10 (only experts know it), for a general audience.
 - answer_type: one of ${answerTypes.join(", ")}. Use "person" when the answer is a person's name (give their full name as the answer), "title" for a book, film, song or artwork, and "city", "country" or "region" (a state, province or region) for places; "place" only for other places such as buildings or rivers.
 - For places, say in the question which kind of place you want ("In which city…", "In which country…"). Never just "Where…".
+- wrong_answers: 3 wrong answers for a multiple-choice quiz. Same kind and format as the answer (a person for a person, a country for a country), plausible enough that someone unsure might pick them, but definitely wrong.
 
 Title: ${a.title}${a.topic ? `\nTopic area: ${a.topic}` : ""}
 Text:
@@ -58,11 +61,11 @@ ${a.text}
 """
 
 Reply with JSON only:
-{"questions": [{"question": "...", "answer": "...", "accepted_answers": ["..."], "category": "...", "difficulty": 3, "answer_type": "..."}]}`;
+{"questions": [{"question": "...", "answer": "...", "accepted_answers": ["..."], "category": "...", "difficulty": 3, "answer_type": "...", "wrong_answers": ["...", "...", "..."]}]}`;
 
 const VERIFY_SYSTEM = "You are a strict fact-checker for a quiz game. You reply with JSON only.";
 
-const verifyPrompt = (a: Article, questions: string[]) => `Answer each trivia question using only the source text, then judge it.
+const verifyPrompt = (a: Article, questions: { question: string; options: string[] }[]) => `Answer each multiple-choice question using only the source text, then judge it.
 
 Source text:
 """
@@ -70,11 +73,12 @@ ${a.text}
 """
 
 Questions:
-${questions.map((q, i) => `${i + 1}. ${q}`).join("\n")}
+${questions.map((q, i) => `${i + 1}. ${q.question}\n${q.options.map((o, j) => `   ${"ABCD"[j]}) ${o}`).join("\n")}`).join("\n")}
 
 For each question, in the same order, reply with JSON only:
 {"results": [{"n": 1,
-  "answer": "<shortest correct answer, 1-5 words, or null if the text does not answer it>",
+  "choice": "<the correct option, copied exactly, or null if the text does not answer it>",
+  "other_correct": <true if another option could also be considered correct>,
   "supported": <true if the text clearly states the answer>,
   "unambiguous": <true if exactly one reasonable answer exists, false if other people, places, dates or things could also fit>,
   "standalone": <true if the question makes sense without seeing the text and does not refer to it>,
@@ -177,6 +181,11 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
     if (last.length >= 4 && containsPhrase(nq, last)) return { ok: false, reason: "answer in question", detail: question };
   }
 
+  const distractors =
+    numericDistractors(answer, answer_type) ??
+    validDistractors(raw.wrong_answers, { question, answer, accepted_answers: accepted, answer_type });
+  if (!distractors) return { ok: false, reason: "bad wrong answers", detail: question };
+
   const d = Math.round(Number(raw.difficulty));
   const difficulty = Number.isFinite(d) ? Math.min(10, Math.max(1, d)) : 5;
 
@@ -189,20 +198,11 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
       category,
       difficulty,
       answer_type,
+      distractors,
       source_url: a.url,
       source_title: a.title,
     },
   };
-}
-
-// The verifier answers blind (it never sees our answer), so agreement is meaningful.
-function agrees(verifierAnswer: string, q: Candidate): boolean {
-  if (isCorrect(verifierAnswer, q.answer, q.accepted_answers, 0.85, q.answer_type)) return true;
-  const v = normalize(verifierAnswer);
-  return [q.answer, ...q.accepted_answers].some((s) => {
-    const n = normalize(s);
-    return n.length >= 3 && (containsPhrase(v, n) || containsPhrase(n, v));
-  });
 }
 
 function judge(check: Record<string, unknown> | undefined, q: Candidate): Result {
@@ -214,8 +214,10 @@ function judge(check: Record<string, unknown> | undefined, q: Candidate): Result
   if (check.standalone !== true) return why("verify: not standalone");
   if (check.obscure === true) return why("verify: obscure");
   if (check.biography === true) return why("verify: biography");
-  const theirs = str(check.answer);
-  if (!theirs || !agrees(theirs, q)) return why("verify: different answer", `${q.answer} vs ${theirs}`);
+  if (check.other_correct === true) return why("verify: two options correct");
+  // the verifier picks blind (it isn't told which option is ours), so agreement is meaningful
+  const theirs = str(check.choice).replace(/^[A-D]\)\s*/, "");
+  if (normalize(theirs) !== normalize(q.answer)) return why("verify: different answer", `${q.answer} vs ${theirs}`);
   return { ok: true, q };
 }
 
@@ -243,7 +245,7 @@ export async function questionsFrom(a: Article): Promise<Result[]> {
   // skips some, check those again in a second call
   let pending = valid;
   for (let round = 0; round < 2 && pending.length; round++) {
-    const check = await completeJSON(VERIFY_SYSTEM, verifyPrompt(a, pending.map((q) => q.question)), "verify");
+    const check = await completeJSON(VERIFY_SYSTEM, verifyPrompt(a, pending.map((q) => ({ question: q.question, options: shuffle([q.answer, ...q.distractors]) }))), "verify");
     const checks = Array.isArray(check.results) ? (check.results as Record<string, unknown>[]) : [check];
     const missing: Candidate[] = [];
     pending.forEach((q, i) => {

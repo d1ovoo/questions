@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUserId } from "@/lib/auth";
-import { answerHints, game } from "@/lib/config";
+import { game } from "@/lib/config";
 import { rateLimited } from "@/lib/ratelimit";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
@@ -10,13 +10,14 @@ export async function POST() {
   if (!userId) return NextResponse.json({ error: "sign in first" }, { status: 401 });
   if (rateLimited(`next:${userId}`)) return NextResponse.json({ error: "slow down" }, { status: 429 });
 
-  const { data, error } = await supabaseAdmin().rpc("next_question", {
+  const { data, error } = await supabaseAdmin().rpc("serve_question", {
     p_user: userId,
     p_window: game.matchWindow,
     p_limit_ms: game.timeLimitMs + game.graceMs,
     p_k_provisional: game.kProvisional,
     p_k_established: game.kEstablished,
     p_provisional_n: game.provisionalAnswers,
+    p_guess: game.guessChance,
   });
   if (error) return NextResponse.json({ error: "try again" }, { status: 500 });
 
@@ -26,7 +27,7 @@ export async function POST() {
     id: data.id,
     question: data.question,
     category: data.category,
-    hint: answerHints[data.answer_type] ?? "",
+    options: data.options,
     remainingMs: Math.max(0, game.timeLimitMs - data.elapsed_ms),
   });
 }

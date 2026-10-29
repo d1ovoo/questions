@@ -15,8 +15,9 @@ export const game = {
   // serve questions whose rating is within this distance of the player first
   matchWindow: 150,
 
-  // answer checking: Levenshtein similarity needed for a fuzzy match
-  fuzzyThreshold: 0.85,
+  // multiple choice: chance of being right by guessing (1 of 4 options); Elo's
+  // expected score starts here so lucky guesses earn little
+  guessChance: 0.25,
 };
 
 // question rating from difficulty 1..10 (linear between the two ends)
@@ -46,15 +47,3 @@ export type Category = (typeof categories)[number];
 
 export const answerTypes = ["person", "year", "number", "city", "country", "region", "place", "title", "other"] as const;
 export type AnswerType = (typeof answerTypes)[number];
-
-// placeholder shown in the answer input
-export const answerHints: Record<string, string> = {
-  person: "name or surname",
-  year: "year",
-  number: "number",
-  city: "city",
-  country: "country",
-  region: "state / region",
-  place: "place",
-  title: "title",
-};

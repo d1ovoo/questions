@@ -9,8 +9,9 @@
     "lint": "eslint",
     "generate": "tsx scripts/generate.ts",
     "review": "tsx scripts/review.ts",
-    "test": "tsx --test lib/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "test": "tsx --test lib/*.test.ts scripts/lib/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "backfill": "tsx scripts/backfill.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

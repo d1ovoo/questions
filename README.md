@@ -73,10 +73,11 @@ How it works:
 
 1. **Source**: Wikipedia's [Vital articles](https://en.wikipedia.org/wiki/Wikipedia:Vital_articles) (~50,000 important topics), sorted by pageviews and processed **most popular first**. The first run downloads the list and pageviews once (about 15 minutes) and caches it in `scripts/.vital-articles.json`; `--refresh-list` re-downloads it. Stubs, lists and disambiguation pages are skipped, and the run stops below `GEN_MIN_DAILY_VIEWS`.
 2. **Generation**: one LLM call per article writes `GEN_QUESTIONS_PER_ARTICLE` (default 3) questions about different, notable facts, from the first `GEN_MAX_EXTRACT_CHARS` (default 4,000) characters of the article. Malformed output, answers that leak into the question, long answers, references to "the article", and answers not present in the text are rejected.
-3. **Verification**: a second call answers all of the article's questions **blind** from the text (it never sees our answers) and reports for each whether the answer is supported, unique, the question standalone, and whether it's too obscure. A question is kept only if all checks pass and its answer matches ours.
-4. **Parallel**: `GEN_CONCURRENCY` (default 3) articles are processed at once. For Ollama to actually run them in parallel, set the Windows environment variable `OLLAMA_NUM_PARALLEL=3` (or higher) and restart Ollama. If your GPU runs out of memory, lower both.
-5. The question is embedded locally (all-MiniLM-L6-v2, 384 dims) and compared to every question in the database via pgvector; similarity ≥ `GEN_SIMILARITY_THRESHOLD` is a duplicate. The database also rejects the same normalized answer from the same article.
-6. Inserted with `rating` derived from difficulty (1 → 800, 10 → 2000; see `lib/config.ts`).
+3. **Wrong options**: each question gets 3 wrong options for multiple choice. Years and numbers get nearby values made in code (1939 → 1936, 1941, 1945); everything else gets plausible wrong answers from the LLM, and any that the answer checker would accept as correct are thrown out.
+4. **Verification**: a second call sees each question with its 4 options shuffled and picks the right one **blind** from the text (it isn't told which is ours). It also reports whether the answer is supported, unique, the question standalone, too obscure or a personal-biography detail, and whether another option could also be right. A question is kept only if all checks pass and it picked our answer.
+5. **Parallel**: `GEN_CONCURRENCY` (default 3) articles are processed at once. For Ollama to actually run them in parallel, set the Windows environment variable `OLLAMA_NUM_PARALLEL=3` (or higher) and restart Ollama. If your GPU runs out of memory, lower both.
+6. The question is embedded locally (all-MiniLM-L6-v2, 384 dims) and compared to every question in the database via pgvector; similarity ≥ `GEN_SIMILARITY_THRESHOLD` is a duplicate. The database also rejects the same normalized answer from the same article.
+7. Inserted with `rating` derived from difficulty (1 → 800, 10 → 2000; see `lib/config.ts`).
 
 It's resumable: progress is saved to `scripts/.state.json` after every article (an article that was mid-way when you stopped is redone). Ctrl+C anytime and run the same command again to continue. `--fresh` discards an unfinished run. Articles already used are remembered across runs.
 
@@ -85,6 +86,14 @@ To use a free API tier instead of Ollama, set `LLM_PROVIDER=openai` plus `OPENAI
 ### Adding more batches later
 
 Run `npm run generate -- --count 2000` again any time. New questions are deduplicated against everything already in the database, served or not. Check the pool with `npm run review -- 0`.
+
+Questions created before multiple choice existed have no wrong options and are never served. Give them options with:
+
+```bash
+npm run backfill
+```
+
+It uses the same LLM (years and numbers are done in code) and has a checker pick the right option blind; questions that fail are deleted. `npm run backfill -- --dry-run` prints the options without writing.
 
 To delete a bad batch before anyone sees it (SQL editor):
 
@@ -109,10 +118,11 @@ Open http://localhost:3000. Other commands: `npm test` (answer checker), `npm ru
 
 ## How the game works
 
-- `next_question` (Postgres) locks the user's profile row, then either resumes their pending question with the remaining time, records an expired pending question as a timeout, or picks an unserved question within ±150 of their rating (falling back to the nearest), with `FOR UPDATE SKIP LOCKED`, and marks it served. Two users can never get the same question.
+- `serve_question` (Postgres) locks the user's profile row, then either resumes their pending question with the remaining time, records an expired pending question as a timeout, or picks an unserved question (with options) within ±150 of their rating (falling back to the nearest), with `FOR UPDATE SKIP LOCKED`, and marks it served. Two users can never get the same question.
 - Leaving or reloading doesn't help: the clock is `served_at` in the database. On return you get the same question with whatever time is left, or a recorded timeout.
-- `/api/answer` grades on the server (lowercase, accents, punctuation and leading articles removed; numbers in digits or words; Levenshtein ≥ 0.85 for answers of 4+ characters; numbers must match exactly). `record_answer` then checks `now() − served_at ≤ 11s` and applies Elo in the same transaction.
-- Elo: `E = 1 / (1 + 10^((question − user)/400))`, K = 40 for the first 30 answers, then 20. Players with fewer than 30 answers are provisional and not on the leaderboard. All of these are in `lib/config.ts`.
+- Multiple choice: each question is shown with its answer and 3 wrong options, in a fixed shuffled order (the same if you reload). Press 1–4 or tap; Esc gives up; Enter or Space goes to the next question.
+- `/api/answer` checks the chosen option on the server. `grade_answer` then checks `now() − served_at ≤ 11s` and applies Elo in the same transaction.
+- Elo: `E = 0.25 + 0.75 / (1 + 10^((question − user)/400))`. The 0.25 is the chance of guessing right, so lucky guesses earn little. K = 40 for the first 30 answers, then 20. Players with fewer than 30 answers are provisional and not on the leaderboard. All of these are in `lib/config.ts`.
 - RLS is on for every table. Clients can only read `profiles`. Questions, answers and every function are reachable only with the service role, used by server code and the generator.
 - `select * from suspicious_users;` in the SQL editor lists accounts with 50+ answers, ≥ 90% accuracy and an average correct answer time under 2.5s.
 

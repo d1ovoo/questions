@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { game } from "@/lib/config";
 
-type Question = { id: number; question: string; remainingMs: number; hint: string };
-type Result = { correct: boolean; answer: string; delta: number };
+type Question = { id: number; question: string; options: string[]; remainingMs: number };
+type Result = { correct: boolean; timedOut: boolean; answer: string; delta: number };
 type Phase = "loading" | "question" | "result" | "empty" | "error";
 
 const signed = (n: number) => (n >= 0 ? `+${n}` : `−${Math.abs(n)}`);
@@ -19,9 +19,7 @@ export function Game() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [q, setQ] = useState<Question | null>(null);
   const [result, setResult] = useState<Result | null>(null);
-  const [value, setValue] = useState("");
-  const input = useRef<HTMLInputElement>(null);
-  const valueRef = useRef("");
+  const [chosen, setChosen] = useState<string | null>(null);
   const busy = useRef(false);
   const resultAt = useRef(0);
   // bumping this fetches the next question
@@ -32,19 +30,20 @@ export function Game() {
     setTurn((t) => t + 1);
   }, []);
 
+  // choice "" means give up / out of time
   const submit = useCallback(
-    async (answer: string) => {
+    async (choice: string) => {
       if (busy.current || !q) return;
       busy.current = true;
+      setChosen(choice);
       const res = await fetch("/api/answer", {
         method: "POST",
-        body: JSON.stringify({ id: q.id, answer }),
+        body: JSON.stringify({ id: q.id, choice }),
       }).catch(() => null);
       if (!res?.ok) return next(); // pending question was already settled; move on
       setResult(await res.json());
       setPhase("result");
       resultAt.current = Date.now();
-      input.current?.focus();
     },
     [q, next],
   );
@@ -63,12 +62,10 @@ export function Game() {
       }
       if (data.status === "empty") return setPhase("empty");
       busy.current = false;
-      valueRef.current = "";
-      setValue("");
+      setChosen(null);
       setResult(null);
       setQ(data);
       setPhase("question");
-      input.current?.focus();
     });
     return () => {
       alive = false;
@@ -76,18 +73,44 @@ export function Game() {
     };
   }, [turn]);
 
-  // when time runs out, send whatever is typed; the server decides if it was in time
+  // when time runs out, the answer counts as wrong; the server has the real clock
   useEffect(() => {
     if (phase !== "question" || !q) return;
-    const deadline = setTimeout(() => submit(valueRef.current), q.remainingMs);
+    const deadline = setTimeout(() => submit(""), q.remainingMs);
     return () => clearTimeout(deadline);
   }, [phase, q, submit]);
+
+  // keyboard: 1–4 to answer, Esc to give up, Enter / Space for the next question
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (phase === "question" && q) {
+        const i = Number(e.key) - 1;
+        if (i >= 0 && i < q.options.length) submit(q.options[i]);
+        else if (e.key === "Escape") submit("");
+      } else if (phase === "result" && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        // ignore a key that was really a double-press of the answer
+        if (Date.now() - resultAt.current > 400) next();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase, q, submit, next]);
 
   if (phase === "empty") {
     return <main className="flex flex-1 items-center justify-center px-4 text-center">no questions left. come back later.</main>;
   }
 
   const link = "text-sm text-muted hover:text-foreground hover:underline underline-offset-4";
+  const showing = phase === "question" || phase === "result";
+
+  function optionClass(o: string) {
+    if (phase !== "result" || !result) return "hover:underline underline-offset-4";
+    if (o === result.answer) return "font-semibold";
+    if (o === chosen) return "text-muted line-through";
+    return "text-muted";
+  }
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-10 px-4 pb-24">
@@ -110,58 +133,48 @@ export function Game() {
         onCopy={(e) => e.preventDefault()}
         onContextMenu={(e) => e.preventDefault()}
       >
-        {phase === "error" ? "something went wrong. retrying." : phase === "loading" ? "" : (q?.question ?? "")}
+        {phase === "error" ? "something went wrong. retrying." : showing ? q?.question : ""}
       </h1>
 
-      <form
-        className="w-full max-w-sm"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (phase === "question" && value.trim()) submit(value);
-          // ignore an Enter that was really a double-press of the answer
-          else if (phase === "result" && Date.now() - resultAt.current > 400) next();
-        }}
-      >
-        <input
-          ref={input}
-          autoFocus
-          autoComplete="off"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          enterKeyHint={phase === "result" ? "next" : "send"}
-          aria-label="answer"
-          placeholder={phase === "question" ? q?.hint : ""}
-          maxLength={100}
-          value={value}
-          // readOnly instead of disabled keeps the mobile keyboard open between questions
-          readOnly={phase !== "question"}
-          onChange={(e) => {
-            valueRef.current = e.target.value;
-            setValue(e.target.value);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape" && phase === "question") submit("");
-          }}
-          className="w-full border-b border-muted py-2 text-center text-xl focus:border-foreground"
-        />
-        <p className="mt-4 h-6 text-center text-lg tabular-nums">
-          {phase === "result" && result &&
-            (result.correct ? `✓ ${signed(result.delta)}` : `✗ ${result.answer} ${signed(result.delta)}`)}
-        </p>
-        <p className="mt-6 h-5 text-center">
-          {phase === "question" && (
-            <button type="button" className={link} onClick={() => submit("")}>
-              give up
-            </button>
-          )}
-          {phase === "result" && (
-            <button type="button" className={link} onClick={next}>
-              next
-            </button>
-          )}
-        </p>
-      </form>
+      <ol className="w-full max-w-sm select-none">
+        {showing &&
+          q?.options.map((o, i) => (
+            <li key={o}>
+              <button
+                type="button"
+                disabled={phase !== "question"}
+                onClick={() => submit(o)}
+                className={`flex w-full gap-4 py-2 text-left text-lg ${optionClass(o)}`}
+              >
+                <span className="w-4 shrink-0 text-muted tabular-nums">{i + 1}</span>
+                <span>
+                  {o}
+                  {phase === "result" && result && o === result.answer && " ✓"}
+                  {phase === "result" && result && o === chosen && !result.correct && " ✗"}
+                </span>
+              </button>
+            </li>
+          ))}
+      </ol>
+
+      <div className="flex h-12 flex-col items-center gap-2 tabular-nums">
+        {phase === "result" && result && (
+          <p className="text-lg">
+            {result.timedOut || chosen === "" ? "✗ " : ""}
+            {signed(result.delta)}
+          </p>
+        )}
+        {phase === "question" && (
+          <button type="button" className={link} onClick={() => submit("")}>
+            give up
+          </button>
+        )}
+        {phase === "result" && (
+          <button type="button" className={link} onClick={next}>
+            next
+          </button>
+        )}
+      </div>
     </main>
   );
 }
