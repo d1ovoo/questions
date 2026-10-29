@@ -148,8 +148,11 @@ export const isYearQuestion = (question: string, answer: string) =>
   /\b(what|which) (year|decade|century)\b|^when\b|\bin what (year|decade|century)\b/i.test(question) ||
   /^\d{3,4}s?( (bc|ad|bce|ce))?$/i.test(answer.trim());
 
+// "76 to 79", "10-20 million", "between 5 and 7": a range, not one answer
+const RANGE = /\d\s*(to|-|–|—|or)\s*\d|\bbetween \d+ and \d+\b/i;
+
 export const isVagueQuantity = (question: string, answer: string) =>
-  VAGUE.test(answer.trim()) || (/\bhow (many|much)\b/i.test(question) && !/^\d/.test(normalize(answer)));
+  VAGUE.test(answer.trim()) || RANGE.test(answer) || (/\bhow (many|much)\b/i.test(question) && !/^\d/.test(normalize(answer)));
 
 // Generic words that don't identify a subject on their own: "the experiment", "the war".
 const GENERIC = new Set(

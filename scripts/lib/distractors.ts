@@ -22,7 +22,8 @@ export function numericDistractors(answer: string, answerType: string | null): s
     const years = offsets.map((d) => y + d).filter((v) => v > 0 && (y > now || v <= now));
     return pick(years, 3).map(String);
   }
-  const m = a.match(/^(\d{1,3})(\s+[^\d].*)?$/);
+  // a number with a short unit ("26 years"); a unit with more numbers ("76 to 79 books") isn't one
+  const m = a.match(/^(\d{1,3})(\s+[^\d]{1,25})?$/);
   if (!m) return null;
   const n = Number(m[1]);
   const suffix = m[2] ?? "";

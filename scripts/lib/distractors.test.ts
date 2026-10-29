@@ -23,6 +23,8 @@ test("numbers keep their unit and stay positive", () => {
     assert.ok(numericDistractors("1", "number")!.every((x) => Number(x) > 1));
   }
   assert.equal(numericDistractors("Paris", "city"), null);
+  assert.equal(numericDistractors("76 to 79 bible books", "number"), null);
+  assert.equal(numericDistractors("5 to 7 minutes", "number"), null);
 });
 
 test("LLM options are rejected if they could be the right answer", () => {
