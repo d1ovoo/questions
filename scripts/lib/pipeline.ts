@@ -35,7 +35,7 @@ Ask about real knowledge: what "${a.title}" is famous for, who created or discov
 Prefer "What is…", "Who…", "Which…" questions about what something is, who made or did it, and what it is known for.
 These examples only show the style. Every question you write must be about "${a.title}" and answered by the text below.
 
-NEVER ask about personal biography details: when or where someone was born or died, their age, parents, children, siblings, spouses or relationships, schooling, height, net worth, or what they did before becoming famous. For a person, ask about their work, achievements and what they are known for.
+NEVER ask about personal biography details: when or where someone was born or died, their age, parents, children, siblings, spouses or relationships, ethnicity, illnesses, schooling, height, net worth, their first or debut role, or what they did before becoming famous. Never ask "one of…" questions. For a person, ask about their work, achievements and what they are known for.
 Also avoid obscure details: minor officials, exact statistics, populations, measurements, dates of minor events. If you would need to be a specialist in "${a.title}" to have any chance, choose another fact.
 
 - NEVER ask "when", "in what year" or "which year/decade/century" questions. Ask about the what, who or which instead: not "In what year did Robert Downey Jr. debut?" but "Which character did Robert Downey Jr. play in Iron Man?".
@@ -109,8 +109,20 @@ const BIOGRAPHY = [
   /\b(how old|at what age|what age|age of)\b/i,
   /\bmaiden name\b/i,
   /\b(net worth|high school|graduat\w*|alma mater|studied at|attended)\b/i,
+  // family and relationships ("brothers" is left out: "Which brothers made the first flight?")
+  /\b(father|mother|parents|son|daughter|children|wife|husband|spouse|married|girlfriend|boyfriend|siblings?|sister|grandfather|grandmother|uncle|aunt)\b/i,
+  /\bparent\b(?! (company|organi[sz]ation|corporation|firm|group))/i,
+  // ethnicity, health, early life ("ethnic group" of a country and "World Heritage" are fine)
+  /\bethnic (background|origin|heritage|roots)s?\b|\bancestry\b|\bdiagnosed\b|\billness\b/i,
+  /\b(first|earliest)( (acting|credited|film|screen|television|tv|professional|major))+ (role|appearance|job)\b|\bacting debut\b|\bfirst (business|job)\b/i,
 ];
 export const isBiography = (question: string) => BIOGRAPHY.some((re) => re.test(question));
+
+// "What is one of X's …?" has several right answers by design
+export const isOneOf = (question: string) => /\bone of\b/i.test(question);
+
+// "85 billion", "2.3 million": statistics, not knowledge
+export const isBigNumber = (answer: string) => /\b(million|billion|trillion)s?\b/i.test(answer);
 
 const VAGUE = /^(about|around|approximately|roughly|over|under|more than|less than|fewer than|nearly|almost|at least|up to|several|many|few|some|a few|dozens?|hundreds|thousands)\b/i;
 // "In what year did X debut?" asks for a date, not knowledge
@@ -137,6 +149,8 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
     return { ok: false, reason: "refers to source", detail: question };
   if (isBiography(question)) return { ok: false, reason: "biography", detail: question };
   if (isYearQuestion(question, answer)) return { ok: false, reason: "year question", detail: question };
+  if (isOneOf(question)) return { ok: false, reason: "one of several", detail: question };
+  if (isBigNumber(answer)) return { ok: false, reason: "exact statistic", detail: `${question} → ${answer}` };
   if (answer.length > 60 || answer.split(/\s+/).length > 6)
     return { ok: false, reason: "answer too long", detail: answer };
 
