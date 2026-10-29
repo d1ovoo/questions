@@ -29,16 +29,19 @@ Ask about real knowledge: what "${a.title}" is famous for, who created or discov
 - Which country did Germany invade on 1 September 1939, starting World War II?
 - How many European Cup / Champions League titles has FC Porto won?
 - What is the chemical symbol for gold?
-- Which company did Jeff Bezos found in 1994?
+- Which company did Jeff Bezos found?
+- Which character did Robert Downey Jr. play in Iron Man?
+- What is the largest planet in the Solar System?
+Prefer "What is…", "Who…", "Which…" questions about what something is, who made or did it, and what it is known for.
 These examples only show the style. Every question you write must be about "${a.title}" and answered by the text below.
 
 NEVER ask about personal biography details: when or where someone was born or died, their age, parents, children, siblings, spouses or relationships, schooling, height, net worth, or what they did before becoming famous. For a person, ask about their work, achievements and what they are known for.
 Also avoid obscure details: minor officials, exact statistics, populations, measurements, dates of minor events. If you would need to be a specialist in "${a.title}" to have any chance, choose another fact.
 
-- For dates, ask for the year only, and only for famous events.
+- NEVER ask "when", "in what year" or "which year/decade/century" questions. Ask about the what, who or which instead: not "In what year did Robert Downey Jr. debut?" but "Which character did Robert Downey Jr. play in Iron Man?".
 - "How many" questions need an exact, small, well-known number as the answer (e.g. "5", "32"). Never vague answers like "over a decade", "about 50" or "several".
 - Always name the subject ("${a.title.replace(/\s*\(.*?\)/g, "")}") or make it the answer; never "the novel", "the company", "he" or "she".
-- Mix difficulties: at least one question should be easy.
+- Mix difficulties: at least one easy question.
 - If the text has fewer than ${n} facts worth asking, return fewer questions.
 
 Rules:
@@ -49,7 +52,7 @@ Rules:
 - Do not put the answer, or part of it, in the question.
 - accepted_answers: other ways of writing the SAME answer (alternative spellings, surname only for well-known people, abbreviations, numerals vs words). Never include different answers.
 - category: one of ${categories.join(", ")}.
-- difficulty: 1 (almost everyone knows it) to 10 (only experts know it), for a general audience.
+- difficulty, 1 to 10: 1-3 easy = common knowledge, almost anyone knows it; 4-7 medium = easy for someone interested in this topic; 8-10 hard = only if you know this specific area well.
 - answer_type: one of ${answerTypes.join(", ")}. Use "person" when the answer is a person's name (give their full name as the answer), "title" for a book, film, song or artwork, and "city", "country" or "region" (a state, province or region) for places; "place" only for other places such as buildings or rivers.
 - For places, say in the question which kind of place you want ("In which city…", "In which country…"). Never just "Where…".
 - wrong_answers: 3 wrong answers for a multiple-choice quiz. Same kind and format as the answer (a person for a person, a country for a country), plausible enough that someone unsure might pick them, but definitely wrong.
@@ -82,7 +85,8 @@ For each question, in the same order, reply with JSON only:
   "supported": <true if the text clearly states the answer>,
   "unambiguous": <true if exactly one reasonable answer exists, false if other people, places, dates or things could also fit>,
   "standalone": <true if the question makes sense without seeing the text and does not refer to it>,
-  "obscure": <true if only a specialist could know this; false for a notable fact a well-read person might know>,
+  "obscure": <true if even someone interested in this topic would be unlikely to know it; false for a notable fact>,
+  "year_question": <true if it asks when something happened or for a year, decade or century>,
   "biography": <true if it asks about a personal detail (birth, death, age, family, relationships, schooling, wealth) rather than what the subject is known for>,
   "reason": "<short reason if anything fails>"}]}`;
 
@@ -109,6 +113,11 @@ const BIOGRAPHY = [
 export const isBiography = (question: string) => BIOGRAPHY.some((re) => re.test(question));
 
 const VAGUE = /^(about|around|approximately|roughly|over|under|more than|less than|fewer than|nearly|almost|at least|up to|several|many|few|some|a few|dozens?|hundreds|thousands)\b/i;
+// "In what year did X debut?" asks for a date, not knowledge
+export const isYearQuestion = (question: string, answer: string) =>
+  /\b(what|which) (year|decade|century)\b|^when\b|\bin what (year|decade|century)\b/i.test(question) ||
+  /^\d{3,4}s?( (bc|ad|bce|ce))?$/i.test(answer.trim());
+
 export const isVagueQuantity = (question: string, answer: string) =>
   VAGUE.test(answer.trim()) || (/\bhow (many|much)\b/i.test(question) && !/^\d/.test(normalize(answer)));
 
@@ -127,6 +136,7 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
   if (/\b(article|passage|the text|according to|mentioned)\b/i.test(question))
     return { ok: false, reason: "refers to source", detail: question };
   if (isBiography(question)) return { ok: false, reason: "biography", detail: question };
+  if (isYearQuestion(question, answer)) return { ok: false, reason: "year question", detail: question };
   if (answer.length > 60 || answer.split(/\s+/).length > 6)
     return { ok: false, reason: "answer too long", detail: answer };
 
@@ -214,6 +224,7 @@ function judge(check: Record<string, unknown> | undefined, q: Candidate): Result
   if (check.standalone !== true) return why("verify: not standalone");
   if (check.obscure === true) return why("verify: obscure");
   if (check.biography === true) return why("verify: biography");
+  if (check.year_question === true) return why("verify: year question");
   if (check.other_correct === true) return why("verify: two options correct");
   // the verifier picks blind (it isn't told which option is ours), so agreement is meaningful
   const theirs = str(check.choice).replace(/^[A-D]\)\s*/, "");
