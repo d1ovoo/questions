@@ -2,6 +2,7 @@
 import { answerTypes, categories, type AnswerType, type Category } from "../../lib/config";
 import { alternatives, normalize } from "../../lib/answer";
 import { numericDistractors, shuffle, validDistractors } from "./distractors";
+import { DIFFICULTY_SCALE, blend } from "./difficulty";
 import { gen } from "./config";
 import { completeJSON } from "./llm";
 import type { Article } from "./wikipedia";
@@ -52,7 +53,7 @@ Rules:
 - Do not put the answer, or part of it, in the question.
 - accepted_answers: other ways of writing the SAME answer (alternative spellings, surname only for well-known people, abbreviations, numerals vs words). Never include different answers.
 - category: one of ${categories.join(", ")}.
-- difficulty, 1 to 10: 1-3 easy = common knowledge, almost anyone knows it; 4-7 medium = easy for someone interested in this topic; 8-10 hard = only if you know this specific area well.
+- difficulty, 1 to 10: 1-3 easy = common knowledge, almost anyone knows it; 4-7 medium = easy for someone interested in this topic; 8-10 hard = only if you know this specific area well. Most questions are not easy.
 - answer_type: one of ${answerTypes.join(", ")}. Use "person" when the answer is a person's name (give their full name as the answer), "title" for a book, film, song or artwork, and "city", "country" or "region" (a state, province or region) for places; "place" only for other places such as buildings or rivers.
 - For places, say in the question which kind of place you want ("In which city…", "In which country…"). Never just "Where…".
 - wrong_answers: 3 wrong answers for a multiple-choice quiz. Same kind and format as the answer (a person for a person, a country for a country), plausible enough that someone unsure might pick them, but definitely wrong.
@@ -78,6 +79,8 @@ ${a.text}
 Questions:
 ${questions.map((q, i) => `${i + 1}. ${q.question}\n${q.options.map((o, j) => `   ${"ABCD"[j]}) ${o}`).join("\n")}`).join("\n")}
 
+${DIFFICULTY_SCALE}
+
 For each question, in the same order, reply with JSON only:
 {"results": [{"n": 1,
   "choice": "<the correct option, copied exactly, or null if the text does not answer it>",
@@ -87,6 +90,7 @@ For each question, in the same order, reply with JSON only:
   "standalone": <true if the question makes sense without seeing the text and does not refer to it>,
   "obscure": <true if even someone interested in this topic would be unlikely to know it; false for a notable fact>,
   "year_question": <true if it asks when something happened or for a year, decade or century>,
+  "difficulty": <1-10 on the scale above>,
   "biography": <true if it asks about a personal detail (birth, death, age, family, relationships, schooling, wealth) rather than what the subject is known for>,
   "reason": "<short reason if anything fails>"}]}`;
 
@@ -229,7 +233,7 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
   };
 }
 
-function judge(check: Record<string, unknown> | undefined, q: Candidate): Result {
+function judge(check: Record<string, unknown> | undefined, q: Candidate, dailyViews: number): Result {
   const why = (reason: string, extra = str(check?.reason)) =>
     ({ ok: false, reason, detail: `${q.question}${extra ? ` (${extra})` : ""}` }) as const;
   if (!check) return why("verify: missing");
@@ -243,7 +247,8 @@ function judge(check: Record<string, unknown> | undefined, q: Candidate): Result
   // the verifier picks blind (it isn't told which option is ours), so agreement is meaningful
   const theirs = str(check.choice).replace(/^[A-D]\)\s*/, "");
   if (normalize(theirs) !== normalize(q.answer)) return why("verify: different answer", `${q.answer} vs ${theirs}`);
-  return { ok: true, q };
+  // the verifier's difficulty uses the anchored scale; the article's popularity nudges it
+  return { ok: true, q: { ...q, difficulty: blend(check.difficulty, dailyViews, q.difficulty) } };
 }
 
 export async function questionsFrom(a: Article): Promise<Result[]> {
@@ -275,7 +280,7 @@ export async function questionsFrom(a: Article): Promise<Result[]> {
     const missing: Candidate[] = [];
     pending.forEach((q, i) => {
       const c = checks.find((x) => Number(x?.n) === i + 1) ?? checks[i];
-      if (c || round === 1) results.push(judge(c, q));
+      if (c || round === 1) results.push(judge(c, q, a.avgViews));
       else missing.push(q);
     });
     pending = missing;

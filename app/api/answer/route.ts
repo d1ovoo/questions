@@ -31,6 +31,7 @@ export async function POST(request: Request) {
     p_k_established: game.kEstablished,
     p_provisional_n: game.provisionalAnswers,
     p_guess: game.guessChance,
+    p_question_k: game.questionK,
   });
   if (error) return NextResponse.json({ error: "no such question" }, { status: 409 });
 

@@ -18,6 +18,9 @@ export const game = {
   // multiple choice: chance of being right by guessing (1 of 4 options); Elo's
   // expected score starts here so lucky guesses earn little
   guessChance: 0.25,
+
+  // question ratings learn from answers with this (small) step
+  questionK: 10,
 };
 
 // question rating from difficulty 1..10 (linear between the two ends)

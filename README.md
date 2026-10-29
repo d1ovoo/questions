@@ -95,6 +95,14 @@ npm run backfill
 
 It uses the same LLM (years and numbers are done in code) and has a checker pick the right option blind; questions that fail are deleted. `npm run backfill -- --dry-run` prints the options without writing.
 
+Difficulty is rated on one anchored scale (`scripts/lib/difficulty.ts`: 1–3 common knowledge, 4–7 easy for someone into the topic, 8–10 only if you know that area), nudged by the article's popularity. To re-rate existing questions on that scale:
+
+```bash
+npm run rerate
+```
+
+By default it only touches questions nobody has answered, so it never overwrites ratings learned from play; `--all` re-rates everything and `--dry-run` only prints.
+
 To delete a bad batch before anyone sees it (SQL editor; `served_at is null` means no player has seen it):
 
 ```sql
@@ -123,6 +131,7 @@ Open http://localhost:3000. Other commands: `npm test` (answer checker), `npm ru
 - Multiple choice: each question is shown with its answer and 3 wrong options, in a fixed shuffled order (the same if you reload). Press 1–4 or tap; Esc gives up; Enter or Space goes to the next question.
 - `/api/answer` checks the chosen option on the server. `grade_answer` then checks `now() − served_at ≤ 11s` and applies Elo in the same transaction.
 - Elo: `E = 0.25 + 0.75 / (1 + 10^((question − user)/400))`. The 0.25 is the chance of guessing right, so lucky guesses earn little. K = 40 for the first 30 answers, then 20. Players with fewer than 30 answers are provisional and not on the leaderboard. All of these are in `lib/config.ts`.
+- Question ratings start from the difficulty (1 → 800, 10 → 2000) and then learn: each answer moves the question's rating by a small step (`questionK`, default 10), up when the player misses and down when they're right.
 - RLS is on for every table. Clients can only read `profiles`. Questions, answers and every function are reachable only with the service role, used by server code and the generator.
 - `select * from suspicious_users;` in the SQL editor lists accounts with 50+ answers, ≥ 90% accuracy and an average correct answer time under 2.5s.
 

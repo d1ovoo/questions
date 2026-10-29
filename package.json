@@ -11,7 +11,8 @@
     "review": "tsx scripts/review.ts",
     "test": "tsx --test lib/*.test.ts scripts/lib/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "backfill": "tsx scripts/backfill.ts"
+    "backfill": "tsx scripts/backfill.ts",
+    "rerate": "tsx scripts/rerate.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
