@@ -84,7 +84,7 @@ ${DIFFICULTY_SCALE}
 For each question, in the same order, reply with JSON only:
 {"results": [{"n": 1,
   "choice": "<the correct option, copied exactly, or null if the text does not answer it>",
-  "other_correct": <true if another option could also be considered correct>,
+  "other_correct": <true if another option could also be considered correct, including partly correct: one member of a group that is the answer, or the answer said in other words>,
   "supported": <true if the text clearly states the answer>,
   "unambiguous": <true if exactly one reasonable answer exists, false if other people, places, dates or things could also fit>,
   "standalone": <true if the question makes sense without seeing the text and does not refer to it>,

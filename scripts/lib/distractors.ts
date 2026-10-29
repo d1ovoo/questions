@@ -33,6 +33,40 @@ export function numericDistractors(answer: string, answerType: string | null): s
   return pick(values.filter((v) => v > 0), 3).map((v) => `${v}${suffix}`);
 }
 
+// Words that people's names share without being the same person.
+const NAME_FILLER = new Set(
+  ("brothers sisters family king queen saint prince princess pope emperor empress lord lady duke " +
+    "khan shah sultan tsar czar pharaoh caliph emir sheikh chief general admiral president").split(" "),
+);
+const words = (s: string) => normalize(s).split(" ").filter((w) => w.length >= 4);
+const contains = (hay: string, needle: string) => needle.length > 0 && ` ${hay} `.includes(` ${needle} `);
+
+// A wrong option that is partly right or just restates the question:
+// "Theo Albrecht" for "The Albrecht brothers", "Aldi founders" for a question about Aldi.
+export function overlaps(option: string, q: Q): boolean {
+  const o = normalize(option);
+  const answers = [q.answer, ...q.accepted_answers].map(normalize).filter(Boolean);
+  // one contains the other ("Albrecht" / "Theo Albrecht")
+  if (answers.some((a) => contains(a, o) || contains(o, a))) return true;
+  // a person sharing the answer's surname is usually a relative or the same group
+  // (first names don't count: "David Simon" is a fine wrong answer for "David Chase")
+  if (q.answer_type === "person") {
+    const surname = (s: string) => s.split(" ").reverse().find((w) => w.length >= 4 && !NAME_FILLER.has(w));
+    const surnames = new Set(answers.map(surname).filter(Boolean));
+    if (words(option).some((w) => surnames.has(w))) return true;
+  }
+  // repeats a name from the question that the answer doesn't have: "Aldi founders". Names the
+  // answer shares are fine: Harry Potter book titles for a Harry Potter question.
+  const answerWords = new Set(answers.flatMap((a) => a.split(" ")));
+  const proper = q.question
+    .split(/\s+/)
+    .slice(1)
+    .filter((w) => /^[A-Z]/.test(w))
+    .map((w) => normalize(w))
+    .filter((w) => w.length >= 4 && !answerWords.has(w));
+  return proper.some((p) => o.split(" ").includes(p));
+}
+
 // Three distinct wrong answers that can't be mistaken for the right one, or null.
 export function validDistractors(list: unknown, q: Q): string[] | null {
   if (!Array.isArray(list)) return null;
@@ -44,6 +78,7 @@ export function validDistractors(list: unknown, q: Q): string[] | null {
     if (!d || d.length > 60 || !n || seen.has(n)) continue;
     // reject anything the checker would accept as the right answer, either way round
     if (isCorrect(d, q.answer, q.accepted_answers, 0.85, q.answer_type) || isCorrect(q.answer, d)) continue;
+    if (overlaps(d, q)) continue;
     seen.add(n);
     out.push(d);
   }

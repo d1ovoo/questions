@@ -35,3 +35,15 @@ test("LLM options are rejected if they could be the right answer", () => {
   assert.equal(validDistractors(["Canada", "Canada", "Mexico"], q), null);
   assert.equal(validDistractors("nope", q), null);
 });
+
+test("options that are partly right or echo the question are rejected", () => {
+  const aldi = { question: "Who introduced the name Aldi in 1962?", answer: "The Albrecht brothers", accepted_answers: [], answer_type: "person" };
+  assert.equal(validDistractors(["Theo Albrecht", "Aldi founders", "Karl Albrecht"], aldi), null);
+  assert.deepEqual(validDistractors(["Dieter Schwarz", "Theo Albrecht", "Lidl founders", "Erivan Haub", "Georg Schaeffler"], aldi), ["Dieter Schwarz", "Lidl founders", "Erivan Haub"]);
+  const sea = { question: "Which ocean is the largest?", answer: "Pacific Ocean", accepted_answers: [], answer_type: "place" };
+  assert.deepEqual(validDistractors(["Atlantic Ocean", "Indian Ocean", "Arctic Ocean"], sea), ["Atlantic Ocean", "Indian Ocean", "Arctic Ocean"]);
+  const php = { question: "Who created the PHP programming language?", answer: "Rasmus Lerdorf", accepted_answers: [], answer_type: "person" };
+  assert.deepEqual(validDistractors(["Guido van Rossum", "Larry Wall", "Brendan Eich"], php), ["Guido van Rossum", "Larry Wall", "Brendan Eich"]);
+  const war = { question: "Which battle ended Napoleon's rule?", answer: "Battle of Waterloo", accepted_answers: [], answer_type: "other" };
+  assert.deepEqual(validDistractors(["Battle of Austerlitz", "Battle of Leipzig", "Battle of Borodino"], war), ["Battle of Austerlitz", "Battle of Leipzig", "Battle of Borodino"]);
+});
