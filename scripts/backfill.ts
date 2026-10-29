@@ -3,7 +3,7 @@
 //   npm run backfill -- --dry-run  print the options, write nothing
 // Questions that can't get good options (the checker disagrees, or another option is
 // also right) are deleted, since they'd never be served.
-import { db } from "./lib/db";
+import { db, selectAll } from "./lib/db";
 import { gen } from "./lib/config";
 import { checkProvider } from "./lib/llm";
 import { checkOptions, llmDistractors, numericDistractors, shuffle } from "./lib/distractors";
@@ -17,14 +17,15 @@ async function main() {
   const dryRun = process.argv.includes("--dry-run");
   await checkProvider();
   const s = db();
-  const { data, error } = await s
-    .from("questions")
-    .select("id, question, answer, accepted_answers, answer_type")
-    .is("distractors", null)
-    .is("served_at", null)
-    .limit(10_000);
-  if (error) throw error;
-  const rows = data as Row[];
+  const rows = await selectAll<Row>((from, to) =>
+    s
+      .from("questions")
+      .select("id, question, answer, accepted_answers, answer_type")
+      .is("distractors", null)
+      .is("served_at", null)
+      .order("id")
+      .range(from, to),
+  );
   console.log(`${rows.length} questions need options${dryRun ? " (dry run)" : ""}`);
 
   let done = 0;

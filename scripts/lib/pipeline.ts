@@ -36,7 +36,7 @@ Ask about real knowledge: what "${a.title}" is famous for, who created or discov
 Prefer "What is…", "Who…", "Which…" questions about what something is, who made or did it, and what it is known for.
 These examples only show the style. Every question you write must be about "${a.title}" and answered by the text below.
 
-NEVER ask about personal biography details: when or where someone was born or died, their age, parents, children, siblings, spouses or relationships, ethnicity, illnesses, schooling, height, net worth, their first or debut role, or what they did before becoming famous. Never ask "one of…" questions. For a person, ask about their work, achievements and what they are known for.
+NEVER ask about personal biography details: when or where someone was born or died, their age, parents, children, siblings, spouses or relationships, ethnicity, illnesses, schooling, height, net worth, their first or debut role, or what they did before becoming famous. Never ask "one of…" questions. Never ask anything sexual. For a person, ask about their work, achievements and what they are known for.
 Also avoid obscure details: minor officials, exact statistics, populations, measurements, dates of minor events. If you would need to be a specialist in "${a.title}" to have any chance, choose another fact.
 
 - NEVER ask "when", "in what year" or "which year/decade/century" questions. Ask about the what, who or which instead: not "In what year did Robert Downey Jr. debut?" but "Which character did Robert Downey Jr. play in Iron Man?".
@@ -122,6 +122,11 @@ const BIOGRAPHY = [
 ];
 export const isBiography = (question: string) => BIOGRAPHY.some((re) => re.test(question));
 
+// Sexual content is never wanted (checked on the question, answer, options and article title).
+const SEXUAL =
+  /\b(sex|sexes|sexual\w*|sexy|orgasm\w*|oral sex|fellatio|blow ?jobs?|cunnilingus|masturbat\w*|porn\w*|erotic\w*|kama ?sutra|genital\w*|penis\w*|vagina\w*|vulva|clitor\w*|intercourse|coitus|prostitut\w*|brothels?|fetish\w*|bdsm|nude|nudity|naked|erections?|ejaculat\w*|condoms?|libido|aphrodisiac\w*|foreplay|threesome|sodomy|incest|rape[ds]?|raping|rapist|molest\w*|stripper|strip ?club|escort service|sex positions?|missionary position|congress of a crow|necrophil\w*|zoophil\w*|bestiality|paraphil\w*|pedophil\w*|paedophil\w*)\b/i;
+export const isSexual = (...texts: string[]) => texts.some((t) => SEXUAL.test(t));
+
 // "What is one of X's …?" has several right answers by design
 export const isOneOf = (question: string) => /\bone of\b/i.test(question);
 
@@ -173,6 +178,7 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
     return { ok: false, reason: "bad question shape", detail: question };
   if (/\b(article|passage|the text|according to|mentioned)\b/i.test(question))
     return { ok: false, reason: "refers to source", detail: question };
+  if (isSexual(question, answer, a.title)) return { ok: false, reason: "sexual", detail: question };
   if (isBiography(question)) return { ok: false, reason: "biography", detail: question };
   if (isYearQuestion(question, answer)) return { ok: false, reason: "year question", detail: question };
   if (isOneOf(question)) return { ok: false, reason: "one of several", detail: question };
@@ -229,6 +235,7 @@ function validate(raw: Record<string, unknown>, a: Article): Result {
     numericDistractors(answer, answer_type) ??
     validDistractors(raw.wrong_answers, { question, answer, accepted_answers: accepted, answer_type });
   if (!distractors) return { ok: false, reason: "bad wrong answers", detail: question };
+  if (isSexual(...distractors)) return { ok: false, reason: "sexual", detail: question };
 
   const d = Math.round(Number(raw.difficulty));
   const difficulty = Number.isFinite(d) ? Math.min(10, Math.max(1, d)) : 5;

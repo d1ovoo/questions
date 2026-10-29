@@ -1,25 +1,27 @@
 // Print random unshown questions (what players will actually get) for a quality check.
 //   npm run review            50 questions
 //   npm run review -- 100     100 questions
-import { db } from "./lib/db";
+import { db, selectAll } from "./lib/db";
 
 type Q = { question: string; answer: string; distractors: string[] | null; category: string; difficulty: number; source_url: string };
 
 async function main() {
   const n = Math.max(0, Number(process.argv[2] ?? 50) || 0);
   const supabase = db();
-  const [{ data: counts }, { data, error }] = await Promise.all([
+  const [{ data: counts }, rows] = await Promise.all([
     supabase.rpc("pool_counts"),
-    supabase
-      .from("questions")
-      .select("question, answer, distractors, category, difficulty, source_url")
-      .is("served_at", null)
-      .limit(20_000),
+    selectAll<Q>((from, to) =>
+      supabase
+        .from("questions")
+        .select("question, answer, distractors, category, difficulty, source_url")
+        .is("served_at", null)
+        .not("distractors", "is", null)
+        .order("id")
+        .range(from, to),
+    ),
   ]);
-  if (error) throw error;
 
   // random sample without replacement
-  const rows = [...(data as Q[])];
   for (let i = rows.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [rows[i], rows[j]] = [rows[j], rows[i]];

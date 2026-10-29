@@ -1,6 +1,7 @@
 // Wikipedia's Vital articles (~50,000 important topics), most viewed first.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { gen } from "./config";
+import { isSexual } from "./pipeline";
 
 const API = "https://en.wikipedia.org/w/api.php";
 
@@ -160,6 +161,10 @@ export async function* articles(
   const queue = byTopic(list.filter((e) => !seen.has(e.title) && e.views >= gen.minDailyViews));
   for (const e of queue) {
     if (seen.has(e.title)) continue;
+    if (isSexual(e.title)) {
+      reject("wiki: sexual topic");
+      continue;
+    }
     const a = await articleText(e.title).catch(() => null);
     if (!a || a.text.length < gen.minExtractChars) {
       reject("wiki: short text");

@@ -4,7 +4,7 @@
 //   npm run rerate -- --dry-run  print the new difficulties, write nothing
 import { existsSync, readFileSync } from "node:fs";
 import { ratingForDifficulty } from "../lib/config";
-import { db } from "./lib/db";
+import { db, selectAll } from "./lib/db";
 import { gen } from "./lib/config";
 import { checkProvider } from "./lib/llm";
 import { blend, rateDifficulty } from "./lib/difficulty";
@@ -24,16 +24,19 @@ async function main() {
       : [],
   );
 
-  const { data, error } = await s
-    .from("questions")
-    .select("id, question, answer, distractors, difficulty, source_title")
-    .not("distractors", "is", null)
-    .limit(50_000);
-  if (error) throw error;
-  let rows = data as Row[];
+  let rows = await selectAll<Row>((from, to) =>
+    s
+      .from("questions")
+      .select("id, question, answer, distractors, difficulty, source_title")
+      .not("distractors", "is", null)
+      .order("id")
+      .range(from, to),
+  );
   if (!all) {
-    const { data: answered } = await s.from("answers").select("question_id").limit(100_000);
-    const done = new Set((answered ?? []).map((a) => a.question_id));
+    const answered = await selectAll<{ question_id: number }>((from, to) =>
+      s.from("answers").select("question_id").order("id").range(from, to),
+    );
+    const done = new Set(answered.map((a) => a.question_id));
     rows = rows.filter((r) => !done.has(r.id));
   }
   console.log(`re-rating ${rows.length} questions${dryRun ? " (dry run)" : ""}`);
