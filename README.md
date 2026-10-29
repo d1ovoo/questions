@@ -1,6 +1,6 @@
 # questions
 
-Minimal trivia with an Elo rating. Every question is shown exactly once, to one person, ever.
+Minimal trivia with an Elo rating. A player never sees the same question twice; different players can get the same questions.
 
 - **Site**: Next.js on Vercel (Hobby). Serves questions already in the database.
 - **Database**: Supabase free tier: Postgres, Auth (Google + magic link), pgvector.
@@ -95,7 +95,7 @@ npm run backfill
 
 It uses the same LLM (years and numbers are done in code) and has a checker pick the right option blind; questions that fail are deleted. `npm run backfill -- --dry-run` prints the options without writing.
 
-To delete a bad batch before anyone sees it (SQL editor):
+To delete a bad batch before anyone sees it (SQL editor; `served_at is null` means no player has seen it):
 
 ```sql
 delete from questions where served_at is null and created_at > now() - interval '1 hour';
@@ -118,8 +118,8 @@ Open http://localhost:3000. Other commands: `npm test` (answer checker), `npm ru
 
 ## How the game works
 
-- `serve_question` (Postgres) locks the user's profile row, then either resumes their pending question with the remaining time, records an expired pending question as a timeout, or picks an unserved question (with options) within ±150 of their rating (falling back to the nearest), with `FOR UPDATE SKIP LOCKED`, and marks it served. Two users can never get the same question.
-- Leaving or reloading doesn't help: the clock is `served_at` in the database. On return you get the same question with whatever time is left, or a recorded timeout.
+- `serve_question` (Postgres) locks the user's profile row, then either resumes their pending question with the remaining time, records an expired pending question as a timeout, or picks a question this player hasn't seen (with options) within ±150 of their rating (falling back to the nearest) and records it in `served`. Other players may have had the same question; nobody gets one twice. `questions.served_at` is when anyone first saw it, so `served_at is null` means nobody has.
+- Leaving or reloading doesn't help: the clock is the player's `served.served_at` in the database. On return you get the same question with whatever time is left, or a recorded timeout.
 - Multiple choice: each question is shown with its answer and 3 wrong options, in a fixed shuffled order (the same if you reload). Press 1–4 or tap; Esc gives up; Enter or Space goes to the next question.
 - `/api/answer` checks the chosen option on the server. `grade_answer` then checks `now() − served_at ≤ 11s` and applies Elo in the same transaction.
 - Elo: `E = 0.25 + 0.75 / (1 + 10^((question − user)/400))`. The 0.25 is the chance of guessing right, so lucky guesses earn little. K = 40 for the first 30 answers, then 20. Players with fewer than 30 answers are provisional and not on the leaderboard. All of these are in `lib/config.ts`.
